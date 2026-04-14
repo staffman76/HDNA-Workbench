@@ -10,7 +10,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.9"
 authors = [
-    {name = "Chris", email = "chris@hdna-workbench.com"},
+    {name = "Chris", email = "staffman76@gmail.com"},
 ]
 keywords = [
     "ai", "interpretability", "explainability", "research",
