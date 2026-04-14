@@ -604,6 +604,14 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical design, including 
 
 ---
 
+## Compliance & Regulatory Alignment
+
+HDNA Workbench features map directly to requirements in the **EU AI Act**, **NIST AI RMF**, and **ISO/IEC 42001**. The audit log, decision replay, stress monitoring, and inspection tools provide the transparency, record-keeping, and human oversight capabilities that these frameworks require.
+
+See **[Compliance & Standards Alignment](docs/compliance.md)** for the full article-by-article mapping, including a feature-to-regulation matrix and a practical compliance workflow.
+
+---
+
 ## Documentation
 
 | Guide | What It Covers |
@@ -615,6 +623,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical design, including 
 | [Tools](docs/tools.md) | All 6 research tools with full API |
 | [Curricula](docs/curricula.md) | Built-in curricula, mastery tracking, CurriculumBuilder |
 | [Custom Games](docs/custom-games.md) | Build your own domain from scratch |
+| [Compliance](docs/compliance.md) | EU AI Act, NIST AI RMF, ISO/IEC 42001 mapping |
 | [Architecture](ARCHITECTURE.md) | Full technical design and novel contributions |
 
 ---
