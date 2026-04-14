@@ -1,6 +1,6 @@
 # HDNA Workbench
 
-### Open-Box AI Research Platform
+### Highly Dynamic Neural Architecture — Open-Box AI Research Platform
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-green.svg)](LICENSE)

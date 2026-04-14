@@ -1,5 +1,7 @@
 # HDNA Workbench Architecture
 
+HDNA stands for **Highly Dynamic Neural Architecture** — a neural network design where connectivity, topology, and neuron behavior can change at runtime, and every component is intrinsically inspectable.
+
 This document describes the technical design of HDNA Workbench. It serves as both developer documentation and prior art establishing the novel concepts in this system.
 
 **Author**: Chris  
