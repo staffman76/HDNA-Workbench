@@ -19,7 +19,7 @@ pip install hdna-workbench[all]
 Or install from source:
 
 ```bash
-git clone https://github.com/ChrisBuilds/hdna-workbench.git
+git clone https://github.com/staffman76/HDNA-Workbench.git
 cd hdna-workbench
 pip install -e .
 ```

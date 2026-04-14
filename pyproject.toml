@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "hdna-workbench"
@@ -41,11 +41,11 @@ all = ["torch>=2.0", "transformers>=4.30", "onnxruntime>=1.14", "onnx>=1.14"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [project.urls]
-Homepage = "https://github.com/ChrisBuilds/hdna-workbench"
-Documentation = "https://github.com/ChrisBuilds/hdna-workbench#readme"
-Repository = "https://github.com/ChrisBuilds/hdna-workbench"
-Issues = "https://github.com/ChrisBuilds/hdna-workbench/issues"
-Funding = "https://github.com/sponsors/ChrisBuilds"
+Homepage = "https://github.com/staffman76/HDNA-Workbench"
+Documentation = "https://github.com/staffman76/HDNA-Workbench#readme"
+Repository = "https://github.com/staffman76/HDNA-Workbench"
+Issues = "https://github.com/staffman76/HDNA-Workbench/issues"
+Funding = "https://github.com/sponsors/staffman76"
 
 [tool.setuptools.packages.find]
 include = ["workbench*"]

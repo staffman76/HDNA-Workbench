@@ -5,7 +5,7 @@ Thanks for your interest in contributing.
 ## Getting Started
 
 ```bash
-git clone https://github.com/ChrisBuilds/hdna-workbench.git
+git clone https://github.com/staffman76/HDNA-Workbench.git
 cd hdna-workbench
 pip install -e ".[dev]"
 ```
@@ -51,7 +51,7 @@ python demo_curricula.py  # Built-in curricula
 
 ## Reporting Issues
 
-Open an issue at https://github.com/ChrisBuilds/hdna-workbench/issues
+Open an issue at https://github.com/staffman76/HDNA-Workbench/issues
 
 ## License
 

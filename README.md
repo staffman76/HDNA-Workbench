@@ -117,7 +117,7 @@ pip install hdna-workbench[all]         # everything
 Or from source:
 
 ```bash
-git clone https://github.com/ChrisBuilds/hdna-workbench.git
+git clone https://github.com/staffman76/HDNA-Workbench.git
 cd hdna-workbench
 pip install -e .
 ```
@@ -629,7 +629,7 @@ HDNA Workbench uses the [Business Source License 1.1](LICENSE).
 
 On April 14, 2030, the license automatically converts to Apache 2.0 (fully open source).
 
-[Contact for commercial licensing](mailto:chris@hdna-workbench.com) | [Sponsor on GitHub](https://github.com/sponsors/ChrisBuilds)
+[Contact for commercial licensing](mailto:chris@hdna-workbench.com) | [Sponsor on GitHub](https://github.com/sponsors/staffman76)
 
 ---
 

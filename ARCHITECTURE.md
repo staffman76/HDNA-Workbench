@@ -4,7 +4,7 @@ This document describes the technical design of HDNA Workbench. It serves as bot
 
 **Author**: Chris  
 **First Published**: April 14, 2026  
-**Repository**: https://github.com/ChrisBuilds/hdna-workbench
+**Repository**: https://github.com/staffman76/HDNA-Workbench
 
 ## Core Concepts
 
