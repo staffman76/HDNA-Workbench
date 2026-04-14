@@ -20,7 +20,7 @@ they let researchers compare glass-box HDNA against any model.
 Full documentation: https://github.com/your-repo/hdna-workbench
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # --- Tool 1: Model Inspection Wrapper ---
 # Make any PyTorch model inspectable with one line

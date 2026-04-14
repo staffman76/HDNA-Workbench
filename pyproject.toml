@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hdna-workbench"
-version = "0.1.0"
+version = "0.1.1"
 description = "Open-Box AI Research Platform — inspectable neurons, universal model adapters, and research tools"
 readme = "README.md"
 license = {file = "LICENSE"}
