@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "hdna-workbench"
+version = "0.1.0"
+description = "Open-Box AI Research Platform — inspectable neurons, universal model adapters, and research tools"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Chris", email = "chris@hdna-workbench.com"},
+]
+keywords = [
+    "ai", "interpretability", "explainability", "research",
+    "neural-network", "open-box", "inspectable", "mechanistic",
+    "transparency", "audit", "compliance",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+pytorch = ["torch>=2.0"]
+huggingface = ["torch>=2.0", "transformers>=4.30"]
+onnx = ["onnxruntime>=1.14", "onnx>=1.14"]
+all = ["torch>=2.0", "transformers>=4.30", "onnxruntime>=1.14", "onnx>=1.14"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+
+[project.urls]
+Homepage = "https://github.com/ChrisBuilds/hdna-workbench"
+Documentation = "https://github.com/ChrisBuilds/hdna-workbench#readme"
+Repository = "https://github.com/ChrisBuilds/hdna-workbench"
+Issues = "https://github.com/ChrisBuilds/hdna-workbench/issues"
+Funding = "https://github.com/sponsors/ChrisBuilds"
+
+[tool.setuptools.packages.find]
+include = ["workbench*"]
+exclude = ["_business*", "demos*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
