@@ -693,9 +693,66 @@ class LiveTrainer:
         # Build curriculum from registry
         self.curriculum = get_curriculum(curriculum_name, phases=phases)
         if self.curriculum is None:
-            # Fallback
             from ..curricula import classification_curriculum
             self.curriculum = classification_curriculum()
+
+        # Check if network input dim matches curriculum feature dim
+        # If not, rebuild the network to match
+        sample_feat_dim = self._get_curriculum_feature_dim()
+        if sample_feat_dim and sample_feat_dim != self.net.input_dim:
+            from ..core.neuron import HDNANetwork
+            from ..core.brain import Brain
+
+            # Scale hidden layers proportionally
+            old_input = self.net.input_dim
+            ratio = sample_feat_dim / max(1, old_input)
+            old_layers = sorted(set(n.layer for n in self.net.neurons.values()))
+            hidden_dims = []
+            for layer_idx in old_layers:
+                if layer_idx > 0 and layer_idx < max(old_layers):
+                    count = len(self.net.get_layer_neurons(layer_idx))
+                    hidden_dims.append(max(4, int(count * max(0.5, min(2.0, ratio)))))
+            if not hidden_dims:
+                hidden_dims = [max(8, sample_feat_dim), max(4, sample_feat_dim // 2)]
+
+            output_dim = self.net.output_dim
+            # Check if output dim needs updating too
+            sample_output = self._get_curriculum_output_dim()
+            if sample_output and sample_output != output_dim:
+                output_dim = sample_output
+
+            new_net = HDNANetwork(input_dim=sample_feat_dim,
+                                  output_dim=output_dim,
+                                  hidden_dims=hidden_dims,
+                                  rng=self.rng)
+            new_brain = Brain(new_net, epsilon=self.brain.epsilon if self.brain else 0.3,
+                              learning_rate=self.brain.lr if self.brain else 0.01)
+
+            # Warm up
+            for _ in range(30):
+                new_net.forward(self.rng.random(sample_feat_dim))
+
+            self.adapter._network = new_net
+            self.adapter._brain = new_brain
+            self.net = new_net
+            self.brain = new_brain
+
+    def _get_curriculum_feature_dim(self):
+        """Get feature dimension from the first task in the curriculum."""
+        for level in self.curriculum.levels:
+            for task in level.tasks:
+                if task.features is not None:
+                    return len(task.features)
+        return None
+
+    def _get_curriculum_output_dim(self):
+        """Get the number of classes from the curriculum."""
+        max_class = 0
+        for level in self.curriculum.levels:
+            for task in level.tasks:
+                if isinstance(task.expected_output, int):
+                    max_class = max(max_class, task.expected_output)
+        return max_class + 1 if max_class > 0 else None
 
     def step(self):
         """Run one training episode. Returns step result dict."""
@@ -708,7 +765,11 @@ class LiveTrainer:
             return None
 
         level, task = result
-        features = task.features if task.features is not None else np.zeros(self.net.input_dim)
+        raw_features = task.features if task.features is not None else np.zeros(self.net.input_dim)
+        # Pad or truncate features to match network input dim
+        features = np.zeros(self.net.input_dim)
+        n = min(len(raw_features), len(features))
+        features[:n] = raw_features[:n]
 
         # Get proposals and Q-values
         proposals = []
