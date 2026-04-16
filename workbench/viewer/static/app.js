@@ -341,18 +341,71 @@ class HDNAViewer {
 
         // Fetch full neuron data
         const res = await fetch(`/api/neuron?id=${neuronId}`).then(r => r.json());
-        this.showNeuronDetail(res);
         this.selectedNeuron = neuronId;
+
+        // If replaying, also fetch replay context for this neuron
+        if (this.isReplaying && this.auditData && this.auditData.records[this.traceStep]) {
+            const record = this.auditData.records[this.traceStep];
+            try {
+                const replay = await fetch(`/api/replay?step=${record.step}`).then(r => r.json());
+                this.showNeuronDetail(res, replay);
+            } catch (err) {
+                this.showNeuronDetail(res);
+            }
+        } else {
+            this.showNeuronDetail(res);
+        }
     }
 
-    showNeuronDetail(data) {
+    showNeuronDetail(data, replayData) {
         const panel = document.getElementById('neuron-detail');
         const title = document.getElementById('nd-title');
         const body = document.getElementById('nd-body');
 
         title.textContent = `Neuron #${data.id}`;
 
-        let html = `
+        // Replay context (if stepping)
+        let html = '';
+        if (replayData) {
+            const act = replayData.neuron_activations[data.id] || 0;
+            const norm = replayData.neuron_normalized[data.id] || 0;
+            const record = replayData.record || {};
+            const isChosen = this.networkData &&
+                data.layer === this.networkData.num_layers - 1 &&
+                this.networkData.nodes.filter(n => n.layer === data.layer)
+                    .findIndex(n => n.id === data.id) === record.chosen_class;
+
+            const actBarW = Math.min(120, norm * 120);
+            const actColor = act > 0 ? 'var(--green)' : 'var(--red)';
+
+            html += `<div style="background:var(--bg-dark);padding:6px 8px;border-radius:4px;margin-bottom:8px">
+                <div style="color:var(--orange);font-weight:600;font-size:11px;margin-bottom:4px">
+                    Step ${replayData.step}${isChosen ? (record.correct ? ' -- CHOSEN (correct)' : ' -- CHOSEN (wrong)') : ''}
+                </div>
+                <div class="stat-row"><span class="label">Activation</span>
+                    <span class="value" style="color:${actColor}">${act.toFixed(6)}
+                        <span class="act-bar" style="width:${actBarW}px;background:${actColor}"></span>
+                    </span>
+                </div>
+                <div class="stat-row"><span class="label">Normalized</span>
+                    <span class="value">${(norm * 100).toFixed(1)}%</span>
+                </div>`;
+
+            // Show which hot edges involve this neuron
+            const hotIn = (replayData.hot_edges || []).filter(e => e.target === data.id);
+            const hotOut = (replayData.hot_edges || []).filter(e => e.source === data.id);
+            if (hotIn.length > 0) {
+                html += `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">Signal from: ${hotIn.map(e => '#' + e.source).join(', ')}</div>`;
+            }
+            if (hotOut.length > 0) {
+                html += `<div style="font-size:10px;color:var(--text-dim)">Signal to: ${hotOut.map(e => '#' + e.target).join(', ')}</div>`;
+            }
+
+            html += `</div>`;
+        }
+
+        // Static neuron info
+        html += `
             <div class="stat-row"><span class="label">Layer</span><span class="value">${data.layer}</span></div>
             <div class="stat-row"><span class="label">Tags</span><span class="value">${(data.tags || []).join(', ') || 'none'}</span></div>
             <div class="stat-row"><span class="label">Avg Activation</span><span class="value">${(data.avg_activation || 0).toFixed(6)}</span></div>
@@ -387,6 +440,20 @@ class HDNAViewer {
 
         body.innerHTML = html;
         panel.classList.add('visible');
+    }
+
+    async refreshSelectedNeuron(replayData) {
+        // Refresh the neuron detail panel with current replay context
+        if (this.selectedNeuron === null) return;
+        const panel = document.getElementById('neuron-detail');
+        if (!panel.classList.contains('visible')) return;
+
+        try {
+            const res = await fetch(`/api/neuron?id=${this.selectedNeuron}`).then(r => r.json());
+            this.showNeuronDetail(res, replayData);
+        } catch (err) {
+            console.error('Failed to refresh neuron:', err);
+        }
     }
 
     closeNeuronDetail() {
@@ -664,6 +731,9 @@ class HDNAViewer {
                     line.material.opacity = 0.03;
                 }
             });
+
+            // Update neuron detail panel if one is selected
+            this.refreshSelectedNeuron(replay);
 
         } catch (err) {
             console.error('Replay fetch failed:', err);
