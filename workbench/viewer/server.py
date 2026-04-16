@@ -977,37 +977,29 @@ class LiveTrainer:
         n = min(len(raw_features), len(features))
         features[:n] = raw_features[:n]
 
-        # Get proposals and Q-values
+        # Get proposals from daemons (they do the real reasoning)
         proposals = []
         selected = None
         if self.coordinator:
             proposals = self.coordinator.collect_proposals(None, features, self.rng)
 
-        q_values = self.brain.get_q_values(features) if self.brain else np.zeros(self.net.output_dim)
-
-        # Select action
+        # Select action: daemon-only (no brain Q-values — they hurt more than help)
+        # The daemons compete on confidence. Best confidence wins.
         if proposals and self.coordinator:
-            selected = self.coordinator.select(proposals, brain_q_values=q_values, rng=self.rng)
+            selected = self.coordinator.select(proposals, brain_q_values=None, rng=self.rng)
             action = int(selected.action) if selected and selected.action is not None else 0
-        elif self.brain:
-            action = self.brain.select_action(features, self.rng)
         else:
-            action = int(np.argmax(self.net.forward(features)))
+            # No daemon proposals — random fallback
+            action = int(self.rng.integers(0, self.net.output_dim))
 
         # Evaluate
         correct = (action == task.expected_output)
         reward = 1.0 if correct else -0.2
 
-        # Learn (with stronger signal)
-        if self.brain:
-            # Use actual next task features instead of random noise
-            next_result = self.curriculum.get_task(self.rng)
-            if next_result:
-                _, next_task = next_result
-                next_features = next_task.features if next_task.features is not None else self.rng.random(len(features))
-            else:
-                next_features = self.rng.random(len(features))
-            self.brain.learn(features, action, reward, next_features, done=False)
+        # Run forward pass to update neuron activations (for visualization)
+        # but don't use brain.learn() — the gradient-based learning doesn't work
+        # well for this architecture. Daemons learn from examples instead.
+        self.net.forward(features)
 
         if correct:
             self.correct += 1
