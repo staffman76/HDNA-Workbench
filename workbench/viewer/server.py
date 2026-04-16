@@ -583,8 +583,9 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 class LiveTrainer:
     """Manages a live training session for the viewer."""
 
-    def __init__(self, adapter, curriculum_name="math", phases=3):
-        from ..curricula import math_curriculum, language_curriculum, spatial_curriculum
+    def __init__(self, adapter, curriculum_name="classification", phases=3):
+        from ..curricula import (math_curriculum, language_curriculum, spatial_curriculum,
+                                 classification_curriculum, sequence_curriculum)
         from ..core.stress import StressMonitor, HomeostasisDaemon, apply_interventions
 
         self.adapter = adapter
@@ -604,7 +605,11 @@ class LiveTrainer:
         self.homeostasis = HomeostasisDaemon(monitor=self.monitor)
 
         # Build curriculum
-        if curriculum_name == "language":
+        if curriculum_name == "classification":
+            self.curriculum = classification_curriculum()
+        elif curriculum_name == "sequence":
+            self.curriculum = sequence_curriculum()
+        elif curriculum_name == "language":
             self.curriculum = language_curriculum()
         elif curriculum_name == "spatial":
             self.curriculum = spatial_curriculum(phases=phases)
