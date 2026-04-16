@@ -88,6 +88,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._list_curricula())
         elif path == "/api/curricula/load_file":
             self._json_response(self._load_curriculum_file(body))
+        elif path == "/api/network/rebuild":
+            self._json_response(self._rebuild_network(body))
         elif path == "/api/train/start":
             self._json_response(self._train_start(body))
         elif path == "/api/train/step":
@@ -357,6 +359,49 @@ class ViewerHandler(SimpleHTTPRequestHandler):
                 "name": reg_name,
                 "levels": len(curriculum.levels),
                 "total_tasks": sum(len(l.tasks) for l in curriculum.levels),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    # --- Network Configuration ---
+
+    def _rebuild_network(self, body):
+        """Rebuild the HDNA network with new dimensions."""
+        global _adapter
+        if _adapter is None:
+            return {"error": "No model loaded"}
+
+        params = json.loads(body) if body else {}
+        input_dim = params.get("input_dim", 24)
+        output_dim = params.get("output_dim", 5)
+        hidden_dims = params.get("hidden_dims", [32, 16])
+        lr = params.get("learning_rate", 0.01)
+        epsilon = params.get("epsilon", 0.3)
+
+        try:
+            from ..core.neuron import HDNANetwork
+            from ..core.brain import Brain
+
+            rng = np.random.default_rng()
+            net = HDNANetwork(input_dim=input_dim, output_dim=output_dim,
+                              hidden_dims=hidden_dims, rng=rng)
+            brain = Brain(net, epsilon=epsilon, learning_rate=lr)
+
+            # Warm up
+            for _ in range(50):
+                net.forward(rng.random(input_dim))
+
+            _adapter._network = net
+            _adapter._brain = brain
+            _adapter._brain.net = net
+
+            return {
+                "status": "rebuilt",
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "hidden_dims": hidden_dims,
+                "neurons": len(net.neurons),
+                "connections": sum(len(n.routing) for n in net.neurons.values()),
             }
         except Exception as e:
             return {"error": str(e)}

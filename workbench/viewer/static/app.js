@@ -1078,6 +1078,57 @@ class HDNAViewer {
         } catch (err) {}
     }
 
+    // --- Network Configuration ---
+
+    applyNetworkPreset() {
+        const preset = document.getElementById('net-preset').value;
+        const hiddenInput = document.getElementById('net-hidden');
+        const presets = {
+            'small': '16, 8',
+            'medium': '32, 16',
+            'large': '48, 24, 12',
+            'deep': '32, 24, 16, 8',
+            'wide': '64, 32',
+        };
+        if (presets[preset]) {
+            hiddenInput.value = presets[preset];
+        }
+    }
+
+    async rebuildNetwork() {
+        const inputDim = parseInt(document.getElementById('net-input').value) || 25;
+        const outputDim = parseInt(document.getElementById('net-output').value) || 5;
+        const hiddenStr = document.getElementById('net-hidden').value;
+        const hiddenDims = hiddenStr.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+
+        if (hiddenDims.length === 0) {
+            alert('Enter at least one hidden dimension');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/network/rebuild', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    input_dim: inputDim,
+                    output_dim: outputDim,
+                    hidden_dims: hiddenDims,
+                }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Rebuild failed: ' + res.error);
+            } else {
+                alert(`Network rebuilt: ${res.neurons} neurons, ${res.connections} connections\nHidden: [${hiddenDims.join(', ')}]`);
+                // Reload the 3D view
+                this.switchToModel('HDNA (primary)');
+            }
+        } catch (err) {
+            alert('Rebuild failed: ' + err);
+        }
+    }
+
     // --- Curriculum Management ---
 
     async refreshCurriculaDropdown() {

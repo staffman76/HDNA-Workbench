@@ -181,6 +181,31 @@
             <div class="tab-pane" id="tab-models">
                 <div class="card">
                     <div class="card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+                        <h3>Network Size</h3>
+                        <span class="toggle">&#9660;</span>
+                    </div>
+                    <div class="card-body collapsed">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Rebuild the HDNA network (resets training)</div>
+                        <div style="display:flex;gap:4px;margin-bottom:4px">
+                            <input id="net-input" type="number" value="25" min="2" max="100" placeholder="Input" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px" title="Input dim">
+                            <input id="net-output" type="number" value="5" min="2" max="20" placeholder="Output" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px" title="Output dim">
+                        </div>
+                        <input id="net-hidden" type="text" value="48, 24, 12" placeholder="Hidden dims (e.g. 48, 24, 12)" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                        <div style="display:flex;gap:4px;margin-bottom:4px">
+                            <select id="net-preset" onchange="app.applyNetworkPreset()" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:11px">
+                                <option value="">Presets...</option>
+                                <option value="small">Small (16, 8)</option>
+                                <option value="medium">Medium (32, 16)</option>
+                                <option value="large">Large (48, 24, 12)</option>
+                                <option value="deep">Deep (32, 24, 16, 8)</option>
+                                <option value="wide">Wide (64, 32)</option>
+                            </select>
+                        </div>
+                        <button onclick="app.rebuildNetwork()" style="width:100%;padding:6px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer;font-size:12px">Rebuild Network</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
                         <h3>Load Custom Curriculum</h3>
                         <span class="toggle">&#9660;</span>
                     </div>
