@@ -370,7 +370,7 @@ def math_curriculum(phases: int = None, tasks_per_level: int = 30,
                 f"{phase_name} L{lvl + 1}",
                 difficulty=min(1.0, difficulty),
                 prerequisites=prereqs,
-                mastery_threshold=0.90,
+                mastery_threshold=0.55,
                 description=f"Phase {phase_idx}: {phase_name}, level {lvl + 1}/{num_levels}",
                 tags={phase_name.lower().replace(" ", "_")},
             )

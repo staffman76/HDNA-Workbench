@@ -261,7 +261,7 @@ def _build_task_curriculum(builder, task_name: str, task_data: dict,
             f"{task_name} {level_name}",
             difficulty=difficulty,
             prerequisites=prereqs,
-            mastery_threshold=0.90,
+            mastery_threshold=0.55,
             description=f"{task_name}: {level_name} difficulty, {len(labels)} classes",
             tags={task_name.lower()},
         )

@@ -378,7 +378,7 @@ def spatial_curriculum(phases: int = None, tasks_per_level: int = 30,
                 f"{phase_name} L{lvl + 1}",
                 difficulty=0.1 + phase_idx * 0.12 + lvl * 0.05,
                 prerequisites=prereqs,
-                mastery_threshold=0.85,
+                mastery_threshold=0.55,
                 description=f"{phase_name}, level {lvl + 1}",
                 tags={phase_name.lower().replace(" ", "_")},
             )
