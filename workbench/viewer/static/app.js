@@ -926,7 +926,8 @@ class HDNAViewer {
             } else {
                 pathInput.value = '';
                 nameInput.value = '';
-                this.refreshModelsList();
+                alert('Loaded: ' + res.name + ' (' + res.info.parameter_count.toLocaleString() + ' params, ' + res.capabilities + ')');
+                await this.refreshModelsList();
             }
         } catch (err) {
             alert('Load failed: ' + err);
