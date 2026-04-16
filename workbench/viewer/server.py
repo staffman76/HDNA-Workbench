@@ -478,6 +478,12 @@ class LiveTrainer:
         if proposals and self.coordinator and selected:
             self.coordinator.record_outcome(selected, reward)
 
+        # Teach daemons from correct answers
+        # (The brain routes, but daemons learn the actual patterns)
+        for daemon in self.coordinator.daemons.values():
+            if hasattr(daemon, 'learn_from_outcome'):
+                daemon.learn_from_outcome(features, task.expected_output, True)
+
         # Rolling accuracy
         self._recent.append(1 if correct else 0)
         if len(self._recent) > 50:

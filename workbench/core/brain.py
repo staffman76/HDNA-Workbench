@@ -32,7 +32,7 @@ class Brain:
     def __init__(self, net: HDNANetwork, epsilon: float = 0.3,
                  epsilon_decay: float = 0.999, epsilon_min: float = 0.01,
                  learning_rate: float = 0.01, gamma: float = 0.99,
-                 gradient_clip: float = 5.0):
+                 gradient_clip: float = 5.0, weight_decay: float = 0.001):
         self.net = net
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
@@ -40,6 +40,7 @@ class Brain:
         self.lr = learning_rate
         self.gamma = gamma
         self.gradient_clip = gradient_clip
+        self.weight_decay = weight_decay
         self.episodes = 0
         self.total_reward = 0.0
         self._reward_history = []
@@ -78,15 +79,16 @@ class Brain:
         """
         Q-learning update through HDNA routing structure.
 
-        Uses TD error to update weights on the path that produced the
-        selected action's Q-value.
+        Propagates TD error backward through ALL layers:
+        - Output/hidden routing strengths updated proportional to source activation
+        - First hidden layer neuron weights updated proportional to input features
+        - Error signal propagates backward through routing connections
         """
         q_values = self.get_q_values(features)
 
         if done:
             td_target = reward
         else:
-            # Use target network if provided (for stability)
             if target_net is not None:
                 q_next = target_net.get_q_values(features_next)
             else:
@@ -99,32 +101,77 @@ class Brain:
         td_error = td_target - q_values[action]
         td_error = np.clip(td_error, -self.gradient_clip, self.gradient_clip)
 
-        # Update output neuron weights for the selected action
+        current_acts = getattr(self.net, '_last_activations', {})
+        last_inputs = getattr(self.net, '_last_inputs', features)
+
+        # Build error signal per neuron, starting from output
+        neuron_errors = {}
+
         output_neurons = self.net.get_layer_neurons(self.net.num_layers - 1)
         if action < len(output_neurons):
-            target_neuron = output_neurons[action]
-            incoming = self.net.get_incoming(target_neuron.neuron_id)
+            neuron_errors[output_neurons[action].neuron_id] = td_error
 
-            for src_id, strength in incoming:
-                if src_id in self.net.neurons:
-                    src_activation = self.net.neurons[src_id].avg_activation
-                    # Weight update scaled by source activation (credit assignment)
-                    delta = self.lr * td_error * max(src_activation, 0.01)
-                    # Update the routing strength
-                    new_strength = strength + delta
-                    # Update in the source neuron's routing table
-                    src_neuron = self.net.neurons[src_id]
-                    src_neuron.routing = [
-                        (tid, new_strength if tid == target_neuron.neuron_id else s)
-                        for tid, s in src_neuron.routing
-                    ]
+        # Backward pass: output layer -> first hidden layer
+        for layer_idx in range(self.net.num_layers - 1, 0, -1):
+            layer_neurons = self.net.get_layer_neurons(layer_idx)
 
-            # Also update the neuron's direct weights
-            target_neuron.weights += self.lr * td_error * np.sign(target_neuron.weights)
-            target_neuron.weights = np.clip(target_neuron.weights,
-                                            -self.gradient_clip, self.gradient_clip)
+            for neuron in layer_neurons:
+                nid = neuron.neuron_id
+                error = neuron_errors.get(nid, 0.0)
+                if abs(error) < 1e-8:
+                    continue
 
-        self.net._index_dirty = True  # routing changed
+                act = current_acts.get(nid, 0.0)
+                # Leaky ReLU derivative: full gradient if active, 0.01x if negative
+                relu_grad = 1.0 if act > 0 else 0.01
+                error *= relu_grad
+
+                if layer_idx == 1:
+                    # First hidden layer: update neuron weights
+                    # gradient = error * input_features (standard backprop)
+                    n = min(len(neuron.weights), len(last_inputs))
+                    grad = error * last_inputs[:n]
+                    # Clip gradient per-element
+                    grad = np.clip(grad, -1.0, 1.0)
+                    neuron.weights[:n] += self.lr * grad
+                    neuron.bias += self.lr * error * 0.1
+                    # Weight decay prevents explosion
+                    neuron.weights *= (1.0 - self.weight_decay)
+                    neuron.weights = np.clip(neuron.weights,
+                                             -self.gradient_clip, self.gradient_clip)
+                else:
+                    # Deeper layers: update incoming routing strengths
+                    incoming = self.net.get_incoming(nid)
+                    for src_id, strength in incoming:
+                        src_act = current_acts.get(src_id, 0.0)
+                        if src_id not in self.net.neurons:
+                            continue
+
+                        # Route strength update: delta = lr * error * source_activation
+                        # Clip the product to prevent explosion
+                        delta = self.lr * np.clip(error * src_act, -1.0, 1.0)
+                        new_strength = (strength + delta) * (1.0 - self.weight_decay)
+                        new_strength = np.clip(new_strength,
+                                               -self.gradient_clip, self.gradient_clip)
+
+                        # Update in source's routing table
+                        src_neuron = self.net.neurons[src_id]
+                        src_neuron.routing = [
+                            (tid, float(new_strength) if tid == nid else s)
+                            for tid, s in src_neuron.routing
+                        ]
+
+                        # Propagate error backward (attenuated)
+                        if src_act > 0:
+                            if src_id not in neuron_errors:
+                                neuron_errors[src_id] = 0.0
+                            neuron_errors[src_id] += np.clip(error * strength, -1.0, 1.0)
+
+                    # Bias update with decay
+                    neuron.bias += self.lr * np.clip(error, -1.0, 1.0) * 0.1
+                    neuron.bias *= (1.0 - self.weight_decay)
+
+        self.net._index_dirty = True
 
     def end_episode(self, episode_reward: float):
         """Called at the end of each episode."""

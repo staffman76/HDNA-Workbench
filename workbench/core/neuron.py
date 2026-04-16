@@ -40,7 +40,8 @@ class HDNANeuron:
     def fire(self, inputs: np.ndarray) -> float:
         """Compute activation and record to memory."""
         raw = np.dot(self.weights[:len(inputs)], inputs[:len(self.weights)]) + self.bias
-        activation = max(0.0, raw)  # ReLU
+        # Leaky ReLU: small gradient for negative values prevents dead neurons
+        activation = float(raw if raw > 0 else raw * 0.01)
         self.memory.append(activation)
         if len(self.memory) > self.memory_capacity:
             self.memory.pop(0)
@@ -247,16 +248,15 @@ class HDNANetwork:
         """
         Forward pass through the network, layer by layer.
 
-        Args:
-            inputs: Input feature vector
-            gates: Optional per-layer gate masks (list of np.ndarray, one per hidden layer)
+        Uses matrix-style computation within each layer for correctness:
+        - Layer 1 neurons: activation = ReLU(weights @ inputs + bias)
+        - Layer 2+ neurons: activation = ReLU(sum(source_act * route_strength) + bias)
 
-        Returns:
-            Output activations from the final layer
+        The routing strengths ARE the weights between layers. The neuron's
+        own weights are only used for the first hidden layer (input projection).
         """
-        # Layer 0 is implicit (the input)
-        # Layers 1..N are neuron layers
-        activations = {-1: inputs}  # virtual: input is "layer 0 output"
+        # Current activations for THIS forward pass
+        current_acts = {}
 
         for layer_idx in range(1, self.num_layers):
             layer_neurons = self.get_layer_neurons(layer_idx)
@@ -266,32 +266,45 @@ class HDNANetwork:
             layer_acts = np.zeros(len(layer_neurons))
             for i, neuron in enumerate(layer_neurons):
                 incoming = self.get_incoming(neuron.neuron_id)
-                if not incoming:
-                    # Input layer neurons read directly from inputs
-                    layer_acts[i] = neuron.fire(inputs)
+
+                if layer_idx == 1:
+                    # First hidden layer: standard weight @ input + bias
+                    n = min(len(neuron.weights), len(inputs))
+                    raw = np.dot(neuron.weights[:n], inputs[:n]) + neuron.bias
                 else:
-                    # Gather from source neurons
-                    n_in = len(incoming)
-                    gathered = np.zeros(n_in)
-                    for j, (src_id, strength) in enumerate(incoming):
-                        if src_id in self.neurons:
-                            gathered[j] = self.neurons[src_id].avg_activation * strength
-                        elif src_id == -1:
-                            # From input
-                            gathered[j] = strength
-                    layer_acts[i] = neuron.fire(gathered)
+                    # Deeper layers: sum of (source_activation * routing_strength)
+                    raw = neuron.bias
+                    for src_id, strength in incoming:
+                        if src_id in current_acts:
+                            raw += current_acts[src_id] * strength
+
+                # Leaky ReLU: prevents dead neurons
+                layer_acts[i] = float(raw if raw > 0 else raw * 0.01)
+
+                # Record activation in neuron memory
+                neuron.memory.append(layer_acts[i])
+                if len(neuron.memory) > neuron.memory_capacity:
+                    neuron.memory.pop(0)
+
+                current_acts[neuron.neuron_id] = layer_acts[i]
 
             # Apply gates if provided
             if gates is not None and layer_idx - 1 < len(gates):
                 gate = gates[layer_idx - 1]
                 if len(gate) == len(layer_acts):
                     layer_acts = layer_acts * gate
+                    for i, neuron in enumerate(layer_neurons):
+                        current_acts[neuron.neuron_id] = layer_acts[i]
 
-            activations[layer_idx] = layer_acts
+        # Store for brain.learn()
+        self._last_activations = current_acts
+        self._last_inputs = inputs
 
-        # Return the final layer's activations
-        max_layer = self.num_layers - 1
-        return activations.get(max_layer, np.array([]))
+        # Return output layer activations
+        output_neurons = self.get_layer_neurons(self.num_layers - 1)
+        if output_neurons:
+            return np.array([current_acts.get(n.neuron_id, 0.0) for n in output_neurons])
+        return np.array([])
 
     def neuron_stats(self) -> dict:
         """Per-layer health statistics."""
