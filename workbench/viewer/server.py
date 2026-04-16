@@ -1090,7 +1090,7 @@ class LiveTrainer:
         self.adapter._audit.record(PredictionRecord(
             step=self.episode,
             chosen_class=action,
-            confidence=float(np.exp(q_values[action]) / (np.sum(np.exp(q_values - np.max(q_values))) + 1e-8)) if len(q_values) > 0 else 0,
+            confidence=float(selected.confidence) if selected else 0.0,
             source="live_train",
             correct=correct,
             reward=reward,
