@@ -38,6 +38,12 @@ class HDNAViewer {
         this.isTraining = false;
         this.trainInterval = null;
         this.trainSpeed = 5;
+        this.chartData = {
+            accuracy: [],   // rolling accuracy values over time
+            epsilon: [],    // epsilon values over time
+            maxPoints: 200, // max data points to show
+            bestAccuracy: 0,
+        };
 
         // Mouse interaction
         this.raycaster = new THREE.Raycaster();
@@ -874,6 +880,87 @@ class HDNAViewer {
         } catch (err) {}
     }
 
+    // --- Accuracy Chart ---
+
+    drawChart() {
+        const canvas = document.getElementById('accuracy-chart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Clear
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, w, h);
+
+        const accData = this.chartData.accuracy;
+        const epsData = this.chartData.epsilon;
+        if (accData.length < 2) return;
+
+        const n = accData.length;
+        const xStep = w / (n - 1);
+
+        // Grid lines at 25%, 50%, 75%
+        ctx.strokeStyle = '#2a3a5e';
+        ctx.lineWidth = 0.5;
+        [0.25, 0.50, 0.75].forEach(pct => {
+            const y = h - pct * h;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        });
+
+        // Y-axis labels
+        ctx.fillStyle = '#556677';
+        ctx.font = '8px sans-serif';
+        ctx.fillText('25%', 2, h - 0.25 * h - 2);
+        ctx.fillText('50%', 2, h - 0.50 * h - 2);
+        ctx.fillText('75%', 2, h - 0.75 * h - 2);
+
+        // Epsilon line (orange, scaled 0-1)
+        ctx.beginPath();
+        ctx.strokeStyle = '#ffab40';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
+        for (let i = 0; i < n; i++) {
+            const x = i * xStep;
+            const y = h - epsData[i] * h;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+        // Accuracy line (green)
+        ctx.beginPath();
+        ctx.strokeStyle = '#00e676';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < n; i++) {
+            const x = i * xStep;
+            const y = h - accData[i] * h;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Current accuracy dot
+        const lastAcc = accData[n - 1];
+        const dotX = (n - 1) * xStep;
+        const dotY = h - lastAcc * h;
+        ctx.beginPath();
+        ctx.fillStyle = lastAcc > 0.5 ? '#00e676' : lastAcc > 0.25 ? '#ffab40' : '#ff5252';
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Current value text
+        ctx.fillStyle = '#e0e0e0';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText((lastAcc * 100).toFixed(1) + '%', w - 4, dotY - 5);
+        ctx.textAlign = 'left';
+    }
+
     // --- Live Training ---
 
     async toggleTraining() {
@@ -901,6 +988,9 @@ class HDNAViewer {
 
         this.isTraining = true;
         this.isReplaying = false;
+        this.chartData.accuracy = [];
+        this.chartData.epsilon = [];
+        this.chartData.bestAccuracy = 0;
         document.getElementById('btn-train').classList.add('active');
         document.getElementById('btn-train').textContent = 'Stop';
         document.getElementById('train-overlay').style.display = 'block';
@@ -995,9 +1085,32 @@ class HDNAViewer {
             const pulse = document.getElementById('train-pulse');
             pulse.style.opacity = pulse.style.opacity === '0.3' ? '1' : '0.3';
 
+            // Extra stats
+            const lr = lastStep.lr || 0;
+            document.getElementById('train-lr').textContent = lr.toFixed(4);
+            document.getElementById('train-neurons').textContent =
+                Object.keys(data.neuron_states).length;
+
+            // Track best accuracy
+            if (acc50 > this.chartData.bestAccuracy) {
+                this.chartData.bestAccuracy = acc50;
+            }
+            document.getElementById('train-best').textContent =
+                (this.chartData.bestAccuracy * 100).toFixed(1) + '%';
+
             // Update header stats
             document.getElementById('stat-neurons').textContent =
                 Object.keys(data.neuron_states).length;
+
+            // Record chart data
+            this.chartData.accuracy.push(acc50);
+            this.chartData.epsilon.push(lastStep.epsilon || 0);
+            if (this.chartData.accuracy.length > this.chartData.maxPoints) {
+                this.chartData.accuracy.shift();
+                this.chartData.epsilon.shift();
+            }
+            document.getElementById('chart-episodes').textContent = stats.episode || 0;
+            this.drawChart();
 
             // Refresh neuron detail if one is selected
             if (this.selectedNeuron !== null) {

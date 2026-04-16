@@ -48,14 +48,30 @@
                 <option value="25">25x</option>
             </select>
         </div>
-        <div id="train-overlay" style="display:none;position:absolute;top:44px;left:12px;background:var(--bg-panel);border:1px solid var(--accent-dim);border-radius:6px;padding:8px 14px;font-size:12px;z-index:5">
+        <div id="train-overlay" style="display:none;position:absolute;top:44px;left:12px;background:var(--bg-panel);border:1px solid var(--accent-dim);border-radius:6px;padding:8px 14px;font-size:12px;z-index:5;min-width:280px">
             <div style="color:var(--accent);font-weight:600;margin-bottom:4px">
                 LIVE TRAINING <span id="train-pulse" style="color:var(--green)">&#9679;</span>
             </div>
-            <div>Episode: <span id="train-ep" style="color:var(--accent)">0</span></div>
-            <div>Accuracy (50): <span id="train-acc" style="color:var(--green)">0%</span></div>
-            <div>Epsilon: <span id="train-eps" style="color:var(--orange)">0</span></div>
-            <div>Level: <span id="train-level" style="color:var(--text-dim)">-</span></div>
+            <div style="display:flex;gap:16px">
+                <div>
+                    <div>Episode: <span id="train-ep" style="color:var(--accent)">0</span></div>
+                    <div>Accuracy (50): <span id="train-acc" style="color:var(--green)">0%</span></div>
+                    <div>Epsilon: <span id="train-eps" style="color:var(--orange)">0</span></div>
+                    <div>Level: <span id="train-level" style="color:var(--text-dim)">-</span></div>
+                </div>
+                <div>
+                    <div>LR: <span id="train-lr" style="color:var(--text-dim)">0</span></div>
+                    <div>Best: <span id="train-best" style="color:var(--green)">0%</span></div>
+                    <div>Neurons: <span id="train-neurons" style="color:var(--accent)">0</span></div>
+                </div>
+            </div>
+            <canvas id="accuracy-chart" width="260" height="80" style="margin-top:6px;border:1px solid var(--border);border-radius:3px;background:var(--bg-dark)"></canvas>
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:2px">
+                <span>0</span>
+                <span style="color:var(--green)">--- accuracy</span>
+                <span style="color:var(--orange)">--- epsilon</span>
+                <span id="chart-episodes">0</span>
+            </div>
             <div id="train-last" style="margin-top:4px;font-size:11px;color:var(--text-dim)"></div>
         </div>
     </div>
