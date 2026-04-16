@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HDNA Workbench Viewer</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="header">
+    <h1>HDNA Workbench</h1>
+    <span class="model-name" id="model-name">Loading...</span>
+    <div class="stats">
+        <span>Neurons: <span class="stat-value" id="stat-neurons">-</span></span>
+        <span>Connections: <span class="stat-value" id="stat-connections">-</span></span>
+        <span>Layers: <span class="stat-value" id="stat-layers">-</span></span>
+        <span>Health: <span class="stat-value" id="stat-health">-</span></span>
+    </div>
+</div>
+
+<div id="main">
+    <!-- 3D Viewport -->
+    <div id="viewport">
+        <canvas id="canvas3d"></canvas>
+        <div id="viewport-overlay">
+            Scroll: zoom | Drag: rotate | Right-drag: pan | Click neuron: inspect
+        </div>
+        <div id="viewport-controls">
+            <button onclick="app.resetCamera()">Reset View</button>
+            <button id="btn-edges" class="active" onclick="app.toggleEdges()">Edges</button>
+            <button id="btn-dead" onclick="app.toggleDead()">Show Dead</button>
+            <button id="btn-labels" onclick="app.toggleLabels()">Labels</button>
+        </div>
+    </div>
+
+    <!-- Neuron detail popup -->
+    <div id="neuron-detail">
+        <span class="close-btn" onclick="app.closeNeuronDetail()">&times;</span>
+        <h3 id="nd-title">Neuron #0</h3>
+        <div id="nd-body"></div>
+    </div>
+
+    <!-- Side Panel -->
+    <div id="sidepanel">
+        <div class="tab-bar">
+            <button class="active" onclick="app.switchTab('neurons')">Neurons</button>
+            <button onclick="app.switchTab('audit')">Audit Trail</button>
+            <button onclick="app.switchTab('health')">Health</button>
+            <button onclick="app.switchTab('daemons')">Daemons</button>
+        </div>
+        <div class="tab-content">
+            <!-- Neurons tab -->
+            <div class="tab-pane active" id="tab-neurons">
+                <div class="layer-legend" id="layer-legend"></div>
+                <div id="neuron-list"><div class="loading">Loading neurons...</div></div>
+            </div>
+            <!-- Audit tab -->
+            <div class="tab-pane" id="tab-audit">
+                <div id="audit-stats" class="card"><div class="card-body">Loading...</div></div>
+                <div id="audit-list"></div>
+            </div>
+            <!-- Health tab -->
+            <div class="tab-pane" id="tab-health">
+                <div id="health-content"><div class="loading">Loading...</div></div>
+            </div>
+            <!-- Daemons tab -->
+            <div class="tab-pane" id="tab-daemons">
+                <div id="daemon-content"><div class="loading">Loading...</div></div>
+            </div>
+        </div>
+        <!-- Trace stepper -->
+        <div id="trace-stepper">
+            <button onclick="app.stepTrace(-1)">&lt;</button>
+            <span class="step-display" id="trace-step">Step 0</span>
+            <button onclick="app.stepTrace(1)">&gt;</button>
+            <input type="range" id="trace-slider" min="0" max="0" value="0"
+                   oninput="app.seekTrace(this.value)">
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/app.js"></script>
+
+</body>
+</html>

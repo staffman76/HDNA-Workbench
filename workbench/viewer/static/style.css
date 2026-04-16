@@ -1,0 +1,435 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-dark: #1a1a2e;
+    --bg-panel: #16213e;
+    --bg-card: #1c2a4a;
+    --border: #2a3a5e;
+    --text: #e0e0e0;
+    --text-dim: #8892a4;
+    --accent: #00d4ff;
+    --accent-dim: #0088aa;
+    --green: #00e676;
+    --red: #ff5252;
+    --orange: #ffab40;
+    --purple: #b388ff;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+}
+
+/* Header */
+#header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    height: 44px;
+}
+
+#header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+#header .model-name {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+#header .stats {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 16px;
+}
+
+#header .stats .stat-value {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Main layout */
+#main {
+    display: flex;
+    height: calc(100vh - 44px);
+}
+
+/* 3D viewport */
+#viewport {
+    flex: 1;
+    position: relative;
+    background: var(--bg-dark);
+}
+
+#viewport canvas {
+    display: block;
+}
+
+#viewport-overlay {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    pointer-events: none;
+}
+
+#viewport-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+#viewport-controls button {
+    padding: 6px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+#viewport-controls button:hover {
+    background: var(--bg-card);
+    border-color: var(--accent);
+}
+
+#viewport-controls button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Side panel */
+#sidepanel {
+    width: 380px;
+    min-width: 300px;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Tabs */
+.tab-bar {
+    display: flex;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+}
+
+.tab-bar button {
+    flex: 1;
+    padding: 8px 4px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tab-bar button:hover {
+    color: var(--text);
+}
+
+.tab-bar button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+/* Tab content */
+.tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.tab-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tab-content::-webkit-scrollbar-track {
+    background: var(--bg-panel);
+}
+
+.tab-content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Cards */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.card-header h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.card-header .toggle {
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.card-body {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.card-body.collapsed {
+    display: none;
+}
+
+/* Neuron details */
+.neuron-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.neuron-row:hover {
+    background: rgba(0, 212, 255, 0.08);
+}
+
+.neuron-row .nid {
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 40px;
+}
+
+.neuron-row .layer-tag {
+    color: var(--purple);
+    font-size: 10px;
+    min-width: 40px;
+}
+
+.neuron-row .activation {
+    min-width: 60px;
+    text-align: right;
+}
+
+.neuron-row .status {
+    min-width: 50px;
+    text-align: center;
+}
+
+.neuron-row .status.dead {
+    color: var(--red);
+}
+
+.neuron-row .status.active {
+    color: var(--green);
+}
+
+/* Audit trail */
+.audit-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.audit-row:hover {
+    background: rgba(0, 212, 255, 0.08);
+}
+
+.audit-row .step {
+    color: var(--text-dim);
+    min-width: 40px;
+}
+
+.audit-row .prediction {
+    color: var(--accent);
+    min-width: 30px;
+    text-align: center;
+}
+
+.audit-row .confidence {
+    min-width: 50px;
+    text-align: right;
+}
+
+.audit-row .result.correct {
+    color: var(--green);
+}
+
+.audit-row .result.wrong {
+    color: var(--red);
+}
+
+/* Stat row */
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 12px;
+}
+
+.stat-row .label {
+    color: var(--text-dim);
+}
+
+.stat-row .value {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.stat-row .value.good { color: var(--green); }
+.stat-row .value.warn { color: var(--orange); }
+.stat-row .value.bad { color: var(--red); }
+
+/* Activation bar */
+.act-bar {
+    display: inline-block;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.7;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+/* Layer legend */
+.layer-legend {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.layer-legend .layer-dot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.layer-legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+/* Trace stepper */
+#trace-stepper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-dark);
+    border-top: 1px solid var(--border);
+}
+
+#trace-stepper button {
+    padding: 4px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+#trace-stepper button:hover {
+    border-color: var(--accent);
+}
+
+#trace-stepper .step-display {
+    font-size: 12px;
+    color: var(--accent);
+    min-width: 80px;
+    text-align: center;
+}
+
+#trace-stepper input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+}
+
+/* Selected neuron detail */
+#neuron-detail {
+    position: absolute;
+    top: 12px;
+    right: 396px;
+    width: 260px;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 12px;
+    display: none;
+    z-index: 10;
+}
+
+#neuron-detail.visible {
+    display: block;
+}
+
+#neuron-detail h3 {
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+#neuron-detail .close-btn {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-dim);
+}
