@@ -16,6 +16,7 @@ import numpy as np
 
 # Global reference to the adapter (set by launch())
 _adapter = None
+_trainer = None  # LiveTrainer instance
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 
 
@@ -54,6 +55,25 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._serve_file("app.js", "application/javascript")
         elif path == "/style.css":
             self._serve_file("style.css", "text/css")
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        content_len = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_len) if content_len > 0 else b''
+
+        if path == "/api/train/start":
+            self._json_response(self._train_start(body))
+        elif path == "/api/train/step":
+            params = json.loads(body) if body else {}
+            count = params.get("count", 1)
+            self._json_response(self._train_step(count))
+        elif path == "/api/train/stop":
+            self._json_response(self._train_stop())
+        elif path == "/api/train/status":
+            self._json_response(self._train_status())
         else:
             self.send_error(404)
 
@@ -227,6 +247,200 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             }
         except Exception as e:
             return {"error": str(e)}
+
+    # --- Training API ---
+
+    def _train_start(self, body):
+        global _trainer
+        if _adapter is None:
+            return {"error": "No model loaded"}
+        if _trainer is not None and _trainer.running:
+            return {"error": "Training already running"}
+
+        params = json.loads(body) if body else {}
+        curriculum_name = params.get("curriculum", "math")
+        phases = params.get("phases", 3)
+
+        try:
+            _trainer = LiveTrainer(_adapter, curriculum_name, phases)
+            return {"status": "started", "curriculum": curriculum_name, "phases": phases}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _train_step(self, count=1):
+        global _trainer
+        if _trainer is None:
+            return {"error": "No training session. Call /api/train/start first."}
+
+        results = []
+        for _ in range(int(count)):
+            result = _trainer.step()
+            if result is None:
+                break
+            results.append(result)
+
+        # Get current network state for live visualization
+        net = _adapter._network
+        neuron_states = {}
+        max_act = 0.001
+        for nid, neuron in net.neurons.items():
+            act = neuron.avg_activation
+            neuron_states[nid] = {
+                "activation": round(act, 6),
+                "is_dead": neuron.is_dead,
+                "variance": round(neuron.activation_variance, 6),
+            }
+            if act > max_act:
+                max_act = act
+
+        # Normalize
+        for nid in neuron_states:
+            neuron_states[nid]["normalized"] = round(
+                neuron_states[nid]["activation"] / max_act, 4)
+
+        # Edge strengths (may have changed due to learning)
+        edges_changed = []
+        for nid, neuron in net.neurons.items():
+            for target_id, strength in neuron.routing:
+                edges_changed.append({
+                    "source": nid,
+                    "target": target_id,
+                    "strength": round(float(strength), 4),
+                })
+
+        return {
+            "steps": results,
+            "total_episodes": _trainer.episode,
+            "neuron_states": neuron_states,
+            "edges": edges_changed,
+            "max_activation": round(max_act, 6),
+            "stats": _trainer.stats(),
+        }
+
+    def _train_stop(self):
+        global _trainer
+        if _trainer is None:
+            return {"status": "no session"}
+        stats = _trainer.stats()
+        _trainer = None
+        return {"status": "stopped", "stats": stats}
+
+    def _train_status(self):
+        if _trainer is None:
+            return {"running": False}
+        return {"running": True, "stats": _trainer.stats()}
+
+
+class LiveTrainer:
+    """Manages a live training session for the viewer."""
+
+    def __init__(self, adapter, curriculum_name="math", phases=3):
+        from ..curricula import math_curriculum, language_curriculum, spatial_curriculum
+
+        self.adapter = adapter
+        self.net = adapter._network
+        self.brain = adapter._brain
+        self.coordinator = adapter._coordinator
+        self.rng = np.random.default_rng()
+        self.episode = 0
+        self.correct = 0
+        self.total_reward = 0.0
+        self.running = True
+        self._recent = []  # last 50 results for rolling accuracy
+
+        # Build curriculum
+        if curriculum_name == "language":
+            self.curriculum = language_curriculum()
+        elif curriculum_name == "spatial":
+            self.curriculum = spatial_curriculum(phases=phases)
+        else:
+            self.curriculum = math_curriculum(phases=phases)
+
+    def step(self):
+        """Run one training episode. Returns step result dict."""
+        if not self.running:
+            return None
+
+        result = self.curriculum.get_task(self.rng)
+        if result is None:
+            self.running = False
+            return None
+
+        level, task = result
+        features = task.features if task.features is not None else np.zeros(self.net.input_dim)
+
+        # Get proposals and Q-values
+        proposals = []
+        if self.coordinator:
+            proposals = self.coordinator.collect_proposals(None, features, self.rng)
+
+        q_values = self.brain.get_q_values(features) if self.brain else np.zeros(self.net.output_dim)
+
+        # Select action
+        if proposals and self.coordinator:
+            selected = self.coordinator.select(proposals, brain_q_values=q_values, rng=self.rng)
+            action = int(selected.action) if selected and selected.action is not None else 0
+        elif self.brain:
+            action = self.brain.select_action(features, self.rng)
+        else:
+            action = int(np.argmax(self.net.forward(features)))
+
+        # Evaluate
+        correct = (action == task.expected_output)
+        reward = 1.0 if correct else -0.2
+
+        # Learn
+        if self.brain:
+            next_features = self.rng.random(len(features))
+            self.brain.learn(features, action, reward, next_features, done=False)
+
+        if correct:
+            self.correct += 1
+        self.total_reward += reward
+        self.episode += 1
+        level.record_attempt(correct)
+
+        # Record outcome for daemons
+        if proposals and self.coordinator and selected:
+            self.coordinator.record_outcome(selected, reward)
+
+        # Rolling accuracy
+        self._recent.append(1 if correct else 0)
+        if len(self._recent) > 50:
+            self._recent.pop(0)
+
+        # Record in audit log
+        from ..core.audit import PredictionRecord
+        self.adapter._audit.record(PredictionRecord(
+            step=self.episode,
+            chosen_class=action,
+            confidence=float(np.max(q_values)) if len(q_values) > 0 else 0,
+            source="live_train",
+            correct=correct,
+            reward=reward,
+        ))
+
+        return {
+            "episode": self.episode,
+            "action": action,
+            "expected": int(task.expected_output),
+            "correct": correct,
+            "reward": round(reward, 2),
+            "level": level.name,
+            "accuracy_50": round(sum(self._recent) / max(1, len(self._recent)), 4),
+            "epsilon": round(self.brain.epsilon, 4) if self.brain else 0,
+        }
+
+    def stats(self):
+        return {
+            "episode": self.episode,
+            "correct": self.correct,
+            "accuracy": round(self.correct / max(1, self.episode), 4),
+            "accuracy_50": round(sum(self._recent) / max(1, len(self._recent)), 4),
+            "total_reward": round(self.total_reward, 4),
+            "running": self.running,
+            "curriculum": self.curriculum.progress,
+        }
 
 
 def _serialize(obj):

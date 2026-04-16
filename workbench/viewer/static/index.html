@@ -31,6 +31,29 @@
             <button id="btn-edges" class="active" onclick="app.toggleEdges()">Edges</button>
             <button id="btn-dead" onclick="app.toggleDead()">Show Dead</button>
             <button id="btn-labels" onclick="app.toggleLabels()">Labels</button>
+            <span style="width:1px;background:var(--border);margin:0 4px"></span>
+            <button id="btn-train" onclick="app.toggleTraining()">Train</button>
+            <select id="train-curriculum" style="padding:4px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px">
+                <option value="math">Math</option>
+                <option value="language">Language</option>
+                <option value="spatial">Spatial</option>
+            </select>
+            <select id="train-speed" style="padding:4px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px">
+                <option value="1">1x</option>
+                <option value="5" selected>5x</option>
+                <option value="10">10x</option>
+                <option value="25">25x</option>
+            </select>
+        </div>
+        <div id="train-overlay" style="display:none;position:absolute;top:44px;left:12px;background:var(--bg-panel);border:1px solid var(--accent-dim);border-radius:6px;padding:8px 14px;font-size:12px;z-index:5">
+            <div style="color:var(--accent);font-weight:600;margin-bottom:4px">
+                LIVE TRAINING <span id="train-pulse" style="color:var(--green)">&#9679;</span>
+            </div>
+            <div>Episode: <span id="train-ep" style="color:var(--accent)">0</span></div>
+            <div>Accuracy (50): <span id="train-acc" style="color:var(--green)">0%</span></div>
+            <div>Epsilon: <span id="train-eps" style="color:var(--orange)">0</span></div>
+            <div>Level: <span id="train-level" style="color:var(--text-dim)">-</span></div>
+            <div id="train-last" style="margin-top:4px;font-size:11px;color:var(--text-dim)"></div>
         </div>
     </div>
 

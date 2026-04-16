@@ -34,6 +34,11 @@ class HDNAViewer {
         this.maxStep = 0;
         this.isReplaying = false;
 
+        // Training state
+        this.isTraining = false;
+        this.trainInterval = null;
+        this.trainSpeed = 5;
+
         // Mouse interaction
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
@@ -802,14 +807,185 @@ class HDNAViewer {
         // Labels handled in render loop via CSS labels or sprite text
     }
 
+    // --- Live Training ---
+
+    async toggleTraining() {
+        if (this.isTraining) {
+            this.stopTraining();
+        } else {
+            this.startTraining();
+        }
+    }
+
+    async startTraining() {
+        const curriculum = document.getElementById('train-curriculum').value;
+        this.trainSpeed = parseInt(document.getElementById('train-speed').value);
+
+        try {
+            await fetch('/api/train/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ curriculum: curriculum, phases: 5 }),
+            });
+        } catch (err) {
+            console.error('Failed to start training:', err);
+            return;
+        }
+
+        this.isTraining = true;
+        this.isReplaying = false;
+        document.getElementById('btn-train').classList.add('active');
+        document.getElementById('btn-train').textContent = 'Stop';
+        document.getElementById('train-overlay').style.display = 'block';
+
+        // Start polling for training steps
+        this.trainLoop();
+    }
+
+    async stopTraining() {
+        this.isTraining = false;
+        if (this.trainInterval) {
+            clearTimeout(this.trainInterval);
+            this.trainInterval = null;
+        }
+
+        try {
+            await fetch('/api/train/stop', { method: 'POST' });
+        } catch (err) {}
+
+        document.getElementById('btn-train').classList.remove('active');
+        document.getElementById('btn-train').textContent = 'Train';
+        document.getElementById('train-overlay').style.display = 'none';
+
+        // Refresh side panels with new data
+        const [auditRes, stressRes, daemonRes] = await Promise.all([
+            fetch('/api/audit?count=200').then(r => r.json()),
+            fetch('/api/stress').then(r => r.json()),
+            fetch('/api/daemons').then(r => r.json()),
+        ]);
+        this.auditData = auditRes;
+        this.buildAuditTrail(auditRes);
+        this.buildHealthPanel(stressRes, this.networkData);
+        this.buildDaemonPanel(daemonRes);
+
+        // Update trace slider
+        if (auditRes.records) {
+            this.maxStep = auditRes.records.length - 1;
+            document.getElementById('trace-slider').max = this.maxStep;
+        }
+    }
+
+    async trainLoop() {
+        if (!this.isTraining) return;
+
+        try {
+            const res = await fetch('/api/train/step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ count: this.trainSpeed }),
+            });
+            const data = await res.json();
+
+            if (data.error || !data.steps || data.steps.length === 0) {
+                this.stopTraining();
+                return;
+            }
+
+            // Update 3D network with live neuron states
+            this.updateNetworkLive(data);
+
+            // Update training overlay
+            const lastStep = data.steps[data.steps.length - 1];
+            const stats = data.stats || {};
+            document.getElementById('train-ep').textContent = stats.episode || 0;
+
+            const acc50 = stats.accuracy_50 || 0;
+            const accEl = document.getElementById('train-acc');
+            accEl.textContent = (acc50 * 100).toFixed(1) + '%';
+            accEl.style.color = acc50 > 0.5 ? 'var(--green)' : acc50 > 0.25 ? 'var(--orange)' : 'var(--red)';
+
+            document.getElementById('train-eps').textContent = lastStep.epsilon || 0;
+            document.getElementById('train-level').textContent = lastStep.level || '-';
+
+            // Show last few results
+            const lastN = data.steps.slice(-5).reverse();
+            document.getElementById('train-last').innerHTML = lastN.map(s =>
+                `<span style="color:${s.correct ? 'var(--green)' : 'var(--red)'}">` +
+                `${s.correct ? 'OK' : 'X'}</span>`
+            ).join(' ');
+
+            // Pulse the training indicator
+            const pulse = document.getElementById('train-pulse');
+            pulse.style.opacity = pulse.style.opacity === '0.3' ? '1' : '0.3';
+
+            // Update header stats
+            document.getElementById('stat-neurons').textContent =
+                Object.keys(data.neuron_states).length;
+
+        } catch (err) {
+            console.error('Train step failed:', err);
+        }
+
+        // Schedule next batch (60ms gap gives smooth visual updates)
+        this.trainInterval = setTimeout(() => this.trainLoop(), 60);
+    }
+
+    updateNetworkLive(data) {
+        // Update neuron glow/size based on live activations
+        const states = data.neuron_states || {};
+
+        Object.values(this.neuronMeshes).forEach(m => {
+            const nid = m.userData.neuronId;
+            const state = states[nid];
+            if (!state) return;
+
+            const norm = state.normalized || 0;
+            const layerColor = LAYER_COLORS[m.userData.node.layer] || LAYER_COLORS[0];
+
+            // Update the stored node data for when training stops
+            m.userData.node.avg_activation = state.activation;
+            m.userData.node.is_dead = state.is_dead;
+
+            if (state.is_dead) {
+                m.material.emissive.setHex(DEAD_COLOR);
+                m.material.emissiveIntensity = 0.05;
+                m.scale.setScalar(0.7);
+            } else {
+                m.material.emissive.setHex(layerColor);
+                m.material.emissiveIntensity = 0.2 + norm * 0.8;
+                m.scale.setScalar(0.8 + norm * 0.5);
+            }
+        });
+
+        // Update edge opacities based on current strengths
+        if (data.edges) {
+            const edgeMap = {};
+            data.edges.forEach(e => {
+                edgeMap[`${e.source}-${e.target}`] = e.strength;
+            });
+
+            this.edgeLines.forEach(line => {
+                const e = line.userData.edge;
+                const key = `${e.source}-${e.target}`;
+                const newStrength = edgeMap[key];
+                if (newStrength !== undefined) {
+                    e.strength = newStrength;
+                    const str = Math.abs(newStrength);
+                    line.material.color.setHex(newStrength > 0 ? 0x00d4ff : 0xff5252);
+                    line.material.opacity = this.showEdges ? Math.min(0.8, 0.05 + str * 0.6) : 0;
+                }
+            });
+        }
+    }
+
     // --- Animation loop ---
 
     animate() {
         requestAnimationFrame(() => this.animate());
         this.updateCamera();
 
-        // Gentle pulse on active neurons (only when not replaying)
-        if (!this.isReplaying) {
+        // Gentle pulse on active neurons (only when idle - not replaying or training)
+        if (!this.isReplaying && !this.isTraining) {
             const time = Date.now() * 0.001;
             Object.values(this.neuronMeshes).forEach(m => {
                 if (!m.userData.node.is_dead && m.userData.neuronId !== this.selectedNeuron) {
@@ -817,16 +993,16 @@ class HDNAViewer {
                     m.material.emissiveIntensity = base + Math.sin(time * 2 + m.userData.neuronId) * 0.05;
                 }
             });
-        } else {
+        } else if (this.isReplaying) {
             // During replay: pulse the chosen output neuron
             const time = Date.now() * 0.003;
             Object.values(this.neuronMeshes).forEach(m => {
                 if (m.scale.x > 1.4) {
-                    // This is the chosen output - make it pulse
                     m.material.emissiveIntensity = 0.7 + Math.sin(time) * 0.3;
                 }
             });
         }
+        // During training: updateNetworkLive handles the visuals
 
         this.renderer.render(this.scene, this.camera);
     }
