@@ -57,6 +57,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._load_model())
         elif path == "/api/models":
             self._json_response(self._list_models())
+        elif path == "/api/curricula":
+            self._json_response(self._list_curricula())
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -82,6 +84,10 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         elif path == "/api/models/compare":
             params = json.loads(body) if body else {}
             self._json_response(self._compare_models(params))
+        elif path == "/api/curricula/list":
+            self._json_response(self._list_curricula())
+        elif path == "/api/curricula/load_file":
+            self._json_response(self._load_curriculum_file(body))
         elif path == "/api/train/start":
             self._json_response(self._train_start(body))
         elif path == "/api/train/step":
@@ -319,6 +325,39 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
             return {"status": "loaded", "neurons": len(loaded_net.neurons),
                     "path": str(save_path)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    # --- Curriculum Management ---
+
+    def _list_curricula(self):
+        from ..curricula.registry import list_curricula
+        return {"curricula": list_curricula()}
+
+    def _load_curriculum_file(self, body):
+        params = json.loads(body) if body else {}
+        file_path = params.get("path", "")
+        name = params.get("name", "")
+
+        if not file_path:
+            return {"error": "No file path provided"}
+
+        try:
+            from ..curricula.registry import load_curriculum_file, register_curriculum
+            curriculum = load_curriculum_file(file_path)
+            reg_name = name or curriculum.name
+            register_curriculum(
+                reg_name,
+                lambda **kw: load_curriculum_file(file_path),
+                description=f"Loaded from {file_path}",
+                tags=["custom", "file"],
+            )
+            return {
+                "status": "loaded",
+                "name": reg_name,
+                "levels": len(curriculum.levels),
+                "total_tasks": sum(len(l.tasks) for l in curriculum.levels),
+            }
         except Exception as e:
             return {"error": str(e)}
 
@@ -584,8 +623,7 @@ class LiveTrainer:
     """Manages a live training session for the viewer."""
 
     def __init__(self, adapter, curriculum_name="classification", phases=3):
-        from ..curricula import (math_curriculum, language_curriculum, spatial_curriculum,
-                                 classification_curriculum, sequence_curriculum)
+        from ..curricula.registry import get_curriculum
         from ..core.stress import StressMonitor, HomeostasisDaemon, apply_interventions
 
         self.adapter = adapter
@@ -604,17 +642,12 @@ class LiveTrainer:
         self.monitor = StressMonitor()
         self.homeostasis = HomeostasisDaemon(monitor=self.monitor)
 
-        # Build curriculum
-        if curriculum_name == "classification":
+        # Build curriculum from registry
+        self.curriculum = get_curriculum(curriculum_name, phases=phases)
+        if self.curriculum is None:
+            # Fallback
+            from ..curricula import classification_curriculum
             self.curriculum = classification_curriculum()
-        elif curriculum_name == "sequence":
-            self.curriculum = sequence_curriculum()
-        elif curriculum_name == "language":
-            self.curriculum = language_curriculum()
-        elif curriculum_name == "spatial":
-            self.curriculum = spatial_curriculum(phases=phases)
-        else:
-            self.curriculum = math_curriculum(phases=phases)
 
     def step(self):
         """Run one training episode. Returns step result dict."""

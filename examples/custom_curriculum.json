@@ -1,0 +1,35 @@
+{
+    "name": "Color Preference",
+    "description": "Classify color combinations by preference (demo custom curriculum)",
+    "levels": [
+        {
+            "name": "Primary Colors",
+            "difficulty": 0.3,
+            "mastery_threshold": 0.85,
+            "tasks": [
+                {"id": "red_1", "features": [1.0, 0.0, 0.0, 0.5, 0.5], "expected": 0},
+                {"id": "red_2", "features": [0.9, 0.1, 0.0, 0.4, 0.6], "expected": 0},
+                {"id": "red_3", "features": [0.8, 0.0, 0.1, 0.6, 0.4], "expected": 0},
+                {"id": "green_1", "features": [0.0, 1.0, 0.0, 0.5, 0.5], "expected": 1},
+                {"id": "green_2", "features": [0.1, 0.9, 0.0, 0.4, 0.6], "expected": 1},
+                {"id": "green_3", "features": [0.0, 0.8, 0.1, 0.6, 0.4], "expected": 1},
+                {"id": "blue_1", "features": [0.0, 0.0, 1.0, 0.5, 0.5], "expected": 2},
+                {"id": "blue_2", "features": [0.0, 0.1, 0.9, 0.4, 0.6], "expected": 2},
+                {"id": "blue_3", "features": [0.1, 0.0, 0.8, 0.6, 0.4], "expected": 2}
+            ]
+        },
+        {
+            "name": "Mixed Colors",
+            "difficulty": 0.7,
+            "mastery_threshold": 0.80,
+            "tasks": [
+                {"id": "mix_1", "features": [0.6, 0.3, 0.1, 0.7, 0.3], "expected": 0},
+                {"id": "mix_2", "features": [0.2, 0.5, 0.3, 0.3, 0.7], "expected": 1},
+                {"id": "mix_3", "features": [0.1, 0.2, 0.7, 0.5, 0.5], "expected": 2},
+                {"id": "mix_4", "features": [0.5, 0.4, 0.1, 0.6, 0.4], "expected": 0},
+                {"id": "mix_5", "features": [0.3, 0.5, 0.2, 0.4, 0.6], "expected": 1},
+                {"id": "mix_6", "features": [0.2, 0.1, 0.7, 0.5, 0.5], "expected": 2}
+            ]
+        }
+    ]
+}

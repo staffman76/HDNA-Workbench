@@ -26,3 +26,5 @@ from .math_cur import math_curriculum
 from .language_cur import language_curriculum
 from .spatial_cur import spatial_curriculum
 from .demo_cur import classification_curriculum, sequence_curriculum
+from .registry import (register_curriculum, unregister_curriculum,
+                       list_curricula, get_curriculum, load_curriculum_file)

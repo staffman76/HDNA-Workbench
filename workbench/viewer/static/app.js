@@ -211,6 +211,7 @@ class HDNAViewer {
             this.buildHealthPanel(stressRes, networkRes);
             this.buildDaemonPanel(daemonRes);
             this.refreshModelsList();
+            this.refreshCurriculaDropdown();
 
             // Set trace slider range
             if (auditRes.records && auditRes.records.length > 0) {
@@ -1075,6 +1076,69 @@ class HDNAViewer {
 
             this.showNeuronDetail(res, fakeReplay);
         } catch (err) {}
+    }
+
+    // --- Curriculum Management ---
+
+    async refreshCurriculaDropdown() {
+        try {
+            const data = await fetch('/api/curricula').then(r => r.json());
+            const select = document.getElementById('train-curriculum');
+            select.innerHTML = '';
+
+            const curricula = data.curricula || {};
+            // Sort: demo first, then by name
+            const sorted = Object.entries(curricula).sort((a, b) => {
+                const aDemo = a[1].tags && a[1].tags.includes('demo');
+                const bDemo = b[1].tags && b[1].tags.includes('demo');
+                if (aDemo && !bDemo) return -1;
+                if (!aDemo && bDemo) return 1;
+                return a[0].localeCompare(b[0]);
+            });
+
+            sorted.forEach(([name, info]) => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = `${name} — ${info.description || ''}`.substring(0, 60);
+                if (info.tags && info.tags.includes('custom')) {
+                    opt.style.color = 'var(--orange)';
+                }
+                select.appendChild(opt);
+            });
+        } catch (err) {
+            console.error('Failed to load curricula:', err);
+        }
+    }
+
+    async loadCurriculumFile() {
+        const pathInput = document.getElementById('load-cur-path');
+        const nameInput = document.getElementById('load-cur-name');
+        const filePath = pathInput.value.trim();
+        const name = nameInput.value.trim();
+
+        if (!filePath) {
+            alert('Enter a path to a .json or .csv file');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/curricula/load_file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: filePath, name: name }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Load failed: ' + res.error);
+            } else {
+                alert(`Loaded "${res.name}": ${res.levels} levels, ${res.total_tasks} tasks`);
+                pathInput.value = '';
+                nameInput.value = '';
+                this.refreshCurriculaDropdown();
+            }
+        } catch (err) {
+            alert('Load failed: ' + err);
+        }
     }
 
     // --- Governance Mode ---

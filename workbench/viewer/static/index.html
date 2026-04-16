@@ -37,12 +37,8 @@
             <button onclick="app.loadModel()">Load</button>
             <span style="width:1px;background:var(--border);margin:0 4px"></span>
             <button id="btn-train" onclick="app.toggleTraining()">Train</button>
-            <select id="train-curriculum" style="padding:4px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px">
-                <option value="classification" selected>Classification</option>
-                <option value="sequence">Sequence</option>
-                <option value="math">Math</option>
-                <option value="language">Language</option>
-                <option value="spatial">Spatial</option>
+            <select id="train-curriculum" style="padding:4px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px;max-width:160px">
+                <option value="classification">Loading...</option>
             </select>
             <select id="train-speed" style="padding:4px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px">
                 <option value="1">1x</option>
@@ -183,6 +179,18 @@
             </div>
             <!-- Models tab -->
             <div class="tab-pane" id="tab-models">
+                <div class="card">
+                    <div class="card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+                        <h3>Load Custom Curriculum</h3>
+                        <span class="toggle">&#9660;</span>
+                    </div>
+                    <div class="card-body">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Load a JSON or CSV file with custom training tasks</div>
+                        <input id="load-cur-path" type="text" placeholder="Path to .json or .csv file" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                        <input id="load-cur-name" type="text" placeholder="Display name" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                        <button onclick="app.loadCurriculumFile()" style="width:100%;padding:6px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer;font-size:12px">Load Curriculum</button>
+                    </div>
+                </div>
                 <div class="card">
                     <div class="card-header"><h3>Load External Model</h3></div>
                     <div class="card-body">
