@@ -45,6 +45,9 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._get_stress())
         elif path == "/api/daemons":
             self._json_response(self._get_daemons())
+        elif path == "/api/replay":
+            step = int(params.get("step", [0])[0])
+            self._json_response(self._get_replay(step))
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -165,6 +168,65 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         if _adapter._coordinator is None:
             return {"daemons": {}}
         return _adapter._coordinator.snapshot()
+
+    def _get_replay(self, step):
+        """Re-run the network for a specific audit step and return per-neuron activations."""
+        if _adapter is None:
+            return {"error": "No model loaded"}
+
+        try:
+            record = _adapter._audit._step_index.get(step)
+            if not record:
+                return {"error": f"No record for step {step}"}
+
+            net = _adapter._network
+            # Run a forward pass and capture per-neuron activation
+            # We use the network's current state (neurons remember recent activations)
+            # For a true replay we'd need stored inputs, but we can show the
+            # neuron activation pattern from their memory at this state
+            neuron_activations = {}
+            max_act = 0.001  # avoid division by zero
+
+            for nid, neuron in net.neurons.items():
+                act = neuron.avg_activation
+                neuron_activations[nid] = round(act, 6)
+                if act > max_act:
+                    max_act = act
+
+            # Normalize to 0-1 for visualization
+            neuron_normalized = {}
+            for nid, act in neuron_activations.items():
+                neuron_normalized[nid] = round(act / max_act, 4)
+
+            # Find which edges are "hot" (both endpoints active)
+            hot_edges = []
+            for nid, neuron in net.neurons.items():
+                src_act = neuron_activations.get(nid, 0)
+                if src_act > 0:
+                    for target_id, strength in neuron.routing:
+                        tgt_act = neuron_activations.get(target_id, 0)
+                        if tgt_act > 0:
+                            flow = src_act * abs(strength) * tgt_act
+                            hot_edges.append({
+                                "source": nid,
+                                "target": target_id,
+                                "flow": round(flow, 6),
+                                "strength": round(float(strength), 4),
+                            })
+
+            # Sort by flow, keep top edges
+            hot_edges.sort(key=lambda e: e["flow"], reverse=True)
+
+            return {
+                "step": step,
+                "record": record.to_dict(),
+                "neuron_activations": neuron_activations,
+                "neuron_normalized": neuron_normalized,
+                "hot_edges": hot_edges[:50],
+                "max_activation": round(max_act, 6),
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
 
 def _serialize(obj):

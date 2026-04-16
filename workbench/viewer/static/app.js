@@ -32,6 +32,7 @@ class HDNAViewer {
         this.showLabels = false;
         this.traceStep = 0;
         this.maxStep = 0;
+        this.isReplaying = false;
 
         // Mouse interaction
         this.raycaster = new THREE.Raycaster();
@@ -588,33 +589,105 @@ class HDNAViewer {
         this.updateTraceDisplay();
     }
 
-    updateTraceDisplay() {
-        document.getElementById('trace-step').textContent = `Step ${this.traceStep}`;
+    async updateTraceDisplay() {
+        const stepLabel = document.getElementById('trace-step');
 
-        // Highlight the corresponding audit row
-        if (this.auditData && this.auditData.records && this.auditData.records[this.traceStep]) {
-            const record = this.auditData.records[this.traceStep];
-
-            // Flash the correct/incorrect on the neurons
-            // Highlight output neuron for chosen class
-            if (this.networkData) {
-                const outputNeurons = this.networkData.nodes.filter(n =>
-                    n.layer === this.networkData.num_layers - 1);
-                outputNeurons.forEach((n, i) => {
-                    const mesh = this.neuronMeshes[n.id];
-                    if (mesh) {
-                        if (i === record.chosen_class) {
-                            mesh.material.emissive.setHex(record.correct ? 0x00e676 : 0xff5252);
-                            mesh.material.emissiveIntensity = 0.8;
-                        } else {
-                            const color = LAYER_COLORS[n.layer] || LAYER_COLORS[0];
-                            mesh.material.emissive.setHex(color);
-                            mesh.material.emissiveIntensity = 0.2;
-                        }
-                    }
-                });
-            }
+        if (!this.auditData || !this.auditData.records || !this.auditData.records[this.traceStep]) {
+            stepLabel.textContent = `Step ${this.traceStep}`;
+            return;
         }
+
+        const record = this.auditData.records[this.traceStep];
+        const correct = record.correct;
+        stepLabel.textContent = `Step ${record.step} ${correct ? '  OK' : '  X'}`;
+        stepLabel.style.color = correct ? 'var(--green)' : 'var(--red)';
+
+        // Fetch replay data with per-neuron activations
+        try {
+            const replay = await fetch(`/api/replay?step=${record.step}`).then(r => r.json());
+            if (replay.error) return;
+
+            this.isReplaying = true;
+            const norm = replay.neuron_normalized || {};
+            const acts = replay.neuron_activations || {};
+            const hotEdgeSet = new Set();
+
+            // Mark hot edges for quick lookup
+            (replay.hot_edges || []).forEach(e => {
+                hotEdgeSet.add(`${e.source}-${e.target}`);
+            });
+
+            // Light up neurons based on activation
+            Object.values(this.neuronMeshes).forEach(m => {
+                const nid = m.userData.neuronId;
+                const intensity = norm[nid] || 0;
+                const isOutput = m.userData.node.layer === this.networkData.num_layers - 1;
+                const layerColor = LAYER_COLORS[m.userData.node.layer] || LAYER_COLORS[0];
+
+                if (m.userData.node.is_dead || intensity < 0.01) {
+                    // Dead or inactive: dim
+                    m.material.emissive.setHex(0x222222);
+                    m.material.emissiveIntensity = 0.05;
+                    m.scale.setScalar(0.7);
+                } else {
+                    // Active: glow proportional to activation
+                    m.material.emissive.setHex(layerColor);
+                    m.material.emissiveIntensity = 0.3 + intensity * 0.7;
+                    m.scale.setScalar(0.8 + intensity * 0.6);
+                }
+
+                // Output neuron: green/red for correct/wrong
+                if (isOutput) {
+                    const outputNeurons = this.networkData.nodes.filter(n =>
+                        n.layer === this.networkData.num_layers - 1);
+                    const outputIdx = outputNeurons.findIndex(n => n.id === nid);
+                    if (outputIdx === record.chosen_class) {
+                        m.material.emissive.setHex(correct ? 0x00e676 : 0xff5252);
+                        m.material.emissiveIntensity = 1.0;
+                        m.scale.setScalar(1.6);
+                    }
+                }
+            });
+
+            // Light up hot edges
+            this.edgeLines.forEach(line => {
+                const e = line.userData.edge;
+                const key = `${e.source}-${e.target}`;
+
+                if (hotEdgeSet.has(key)) {
+                    // Hot edge: bright, thick feel
+                    line.material.color.setHex(0x00ffcc);
+                    line.material.opacity = 0.7;
+                } else {
+                    // Cold edge: very dim
+                    line.material.color.setHex(0x1a2a3e);
+                    line.material.opacity = 0.03;
+                }
+            });
+
+        } catch (err) {
+            console.error('Replay fetch failed:', err);
+        }
+    }
+
+    resetTraceHighlights() {
+        // Restore neurons to default appearance
+        this.isReplaying = false;
+        Object.values(this.neuronMeshes).forEach(m => {
+            const node = m.userData.node;
+            const color = node.is_dead ? DEAD_COLOR : (LAYER_COLORS[node.layer] || LAYER_COLORS[0]);
+            m.material.emissive.setHex(color);
+            m.material.emissiveIntensity = node.is_dead ? 0.05 : 0.2 + node.avg_activation * 0.3;
+            m.scale.setScalar(1.0);
+        });
+
+        // Restore edges
+        this.edgeLines.forEach(line => {
+            const e = line.userData.edge;
+            const str = Math.abs(e.strength);
+            line.material.color.setHex(e.strength > 0 ? 0x00d4ff : 0xff5252);
+            line.material.opacity = this.showEdges ? Math.min(0.6, 0.05 + str * 0.5) : 0;
+        });
     }
 
     // --- Toggle controls ---
@@ -654,14 +727,25 @@ class HDNAViewer {
         requestAnimationFrame(() => this.animate());
         this.updateCamera();
 
-        // Gentle pulse on active neurons
-        const time = Date.now() * 0.001;
-        Object.values(this.neuronMeshes).forEach(m => {
-            if (!m.userData.node.is_dead && m.userData.neuronId !== this.selectedNeuron) {
-                const base = 0.2 + m.userData.node.avg_activation * 0.3;
-                m.material.emissiveIntensity = base + Math.sin(time * 2 + m.userData.neuronId) * 0.05;
-            }
-        });
+        // Gentle pulse on active neurons (only when not replaying)
+        if (!this.isReplaying) {
+            const time = Date.now() * 0.001;
+            Object.values(this.neuronMeshes).forEach(m => {
+                if (!m.userData.node.is_dead && m.userData.neuronId !== this.selectedNeuron) {
+                    const base = 0.2 + m.userData.node.avg_activation * 0.3;
+                    m.material.emissiveIntensity = base + Math.sin(time * 2 + m.userData.neuronId) * 0.05;
+                }
+            });
+        } else {
+            // During replay: pulse the chosen output neuron
+            const time = Date.now() * 0.003;
+            Object.values(this.neuronMeshes).forEach(m => {
+                if (m.scale.x > 1.4) {
+                    // This is the chosen output - make it pulse
+                    m.material.emissiveIntensity = 0.7 + Math.sin(time) * 0.3;
+                }
+            });
+        }
 
         this.renderer.render(this.scene, this.camera);
     }
