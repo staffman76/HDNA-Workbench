@@ -87,9 +87,10 @@
     <div id="sidepanel">
         <div class="tab-bar">
             <button class="active" onclick="app.switchTab('neurons')">Neurons</button>
-            <button onclick="app.switchTab('audit')">Audit Trail</button>
+            <button onclick="app.switchTab('audit')">Audit</button>
             <button onclick="app.switchTab('health')">Health</button>
             <button onclick="app.switchTab('daemons')">Daemons</button>
+            <button onclick="app.switchTab('models')">Models</button>
         </div>
         <div class="tab-content">
             <!-- Neurons tab -->
@@ -109,6 +110,27 @@
             <!-- Daemons tab -->
             <div class="tab-pane" id="tab-daemons">
                 <div id="daemon-content"><div class="loading">Loading...</div></div>
+            </div>
+            <!-- Models tab -->
+            <div class="tab-pane" id="tab-models">
+                <div class="card">
+                    <div class="card-header"><h3>Load External Model</h3></div>
+                    <div class="card-body">
+                        <div style="margin-bottom:6px">
+                            <select id="load-model-type" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                                <option value="pytorch">PyTorch Demo MLP</option>
+                                <option value="pytorch_file">PyTorch (.pt file)</option>
+                                <option value="huggingface">HuggingFace (by name)</option>
+                                <option value="onnx">ONNX (.onnx file)</option>
+                            </select>
+                            <input id="load-model-path" type="text" placeholder="Model path or HF name (e.g. distilgpt2)" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                            <input id="load-model-name" type="text" placeholder="Display name (optional)" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:4px">
+                            <button onclick="app.loadExternalModel()" style="width:100%;padding:6px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--text);border-radius:3px;cursor:pointer;font-size:12px">Load Model</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="models-list"><div class="loading">No external models loaded</div></div>
+                <div id="compare-results"></div>
             </div>
         </div>
         <!-- Trace stepper -->

@@ -208,6 +208,7 @@ class HDNAViewer {
             this.buildAuditTrail(auditRes);
             this.buildHealthPanel(stressRes, networkRes);
             this.buildDaemonPanel(daemonRes);
+            this.refreshModelsList();
 
             // Set trace slider range
             if (auditRes.records && auditRes.records.length > 0) {
@@ -878,6 +879,200 @@ class HDNAViewer {
 
             this.showNeuronDetail(res, fakeReplay);
         } catch (err) {}
+    }
+
+    // --- External Model Management ---
+
+    async loadExternalModel() {
+        const typeSelect = document.getElementById('load-model-type');
+        const pathInput = document.getElementById('load-model-path');
+        const nameInput = document.getElementById('load-model-name');
+
+        let modelType = typeSelect.value;
+        let modelPath = pathInput.value.trim();
+        let modelName = nameInput.value.trim();
+
+        // Map UI options to API params
+        if (modelType === 'pytorch') {
+            modelPath = '';  // demo model
+            modelName = modelName || 'PyTorch Demo MLP';
+        } else if (modelType === 'pytorch_file') {
+            modelType = 'pytorch';
+            if (!modelPath) { alert('Enter a .pt file path'); return; }
+        } else if (modelType === 'huggingface') {
+            if (!modelPath) { alert('Enter a HuggingFace model name (e.g. distilgpt2)'); return; }
+            modelName = modelName || modelPath;
+        } else if (modelType === 'onnx') {
+            if (!modelPath) { alert('Enter an .onnx file path'); return; }
+        }
+
+        const btn = event.target;
+        btn.textContent = 'Loading...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/models/load', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: modelType,
+                    path: modelPath,
+                    name: modelName,
+                }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Load failed: ' + res.error);
+            } else {
+                pathInput.value = '';
+                nameInput.value = '';
+                this.refreshModelsList();
+            }
+        } catch (err) {
+            alert('Load failed: ' + err);
+        }
+
+        btn.textContent = 'Load Model';
+        btn.disabled = false;
+    }
+
+    async refreshModelsList() {
+        const container = document.getElementById('models-list');
+        try {
+            const data = await fetch('/api/models').then(r => r.json());
+            if (!data.models || Object.keys(data.models).length === 0) {
+                container.innerHTML = '<div class="loading">No models loaded</div>';
+                return;
+            }
+
+            let html = '';
+            Object.entries(data.models).forEach(([name, model]) => {
+                const info = model.info;
+                const isPrimary = model.is_primary;
+                const borderColor = isPrimary ? 'var(--accent)' : 'var(--border)';
+
+                html += `<div class="card" style="border-color:${borderColor}">
+                    <div class="card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+                        <h3>${isPrimary ? '&#9733; ' : ''}${name}</h3>
+                        <span class="toggle" style="color:var(--text-dim)">${info.framework} &#9660;</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-row"><span class="label">Framework</span><span class="value">${info.framework}</span></div>
+                        <div class="stat-row"><span class="label">Architecture</span><span class="value">${info.architecture}</span></div>
+                        <div class="stat-row"><span class="label">Parameters</span><span class="value">${(info.parameter_count || 0).toLocaleString()}</span></div>
+                        <div class="stat-row"><span class="label">Layers</span><span class="value">${info.layer_count || 0}</span></div>
+                        <div class="stat-row"><span class="label">Capabilities</span><span class="value" style="font-size:10px;word-break:break-all">${model.capabilities}</span></div>`;
+
+                if (!isPrimary) {
+                    html += `<div style="margin-top:6px;display:flex;gap:4px">
+                        <button onclick="app.inspectModel('${name}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--accent);border-radius:3px;cursor:pointer;font-size:11px">Inspect</button>
+                        <button onclick="app.compareWithPrimary('${name}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--orange);border-radius:3px;cursor:pointer;font-size:11px">Compare vs HDNA</button>
+                    </div>`;
+                }
+
+                html += `</div></div>`;
+            });
+
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<div class="loading">Error: ${err}</div>`;
+        }
+    }
+
+    async inspectModel(name) {
+        const container = document.getElementById('compare-results');
+        container.innerHTML = '<div class="loading">Inspecting...</div>';
+
+        try {
+            const res = await fetch('/api/models/inspect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red)">${res.error}</div></div>`;
+                return;
+            }
+
+            let html = `<div class="card" style="border-color:var(--accent)">
+                <div class="card-header"><h3>Inspection: ${name}</h3></div>
+                <div class="card-body">`;
+
+            const info = res.info || {};
+            html += `<div class="stat-row"><span class="label">Tier</span><span class="value">${res.tier || '?'}</span></div>`;
+
+            // Layers
+            if (res.layers) {
+                html += `<div style="margin-top:8px;color:var(--accent);font-weight:600;font-size:11px">Layers (${res.layers.length})</div>`;
+                res.layers.slice(0, 15).forEach(l => {
+                    const inspectable = l.inspectable ? ' <span style="color:var(--green)">[I]</span>' : '';
+                    html += `<div class="stat-row">
+                        <span class="label">${l.name}${inspectable}</span>
+                        <span class="value">${l.type} (${(l.parameter_count || 0).toLocaleString()})</span>
+                    </div>`;
+                });
+                if (res.layers.length > 15) {
+                    html += `<div style="color:var(--text-dim);font-size:10px">...and ${res.layers.length - 15} more</div>`;
+                }
+            }
+
+            html += `</div></div>`;
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red)">Error: ${err}</div></div>`;
+        }
+    }
+
+    async compareWithPrimary(name) {
+        const container = document.getElementById('compare-results');
+        container.innerHTML = '<div class="loading">Comparing...</div>';
+
+        try {
+            const res = await fetch('/api/models/compare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ models: [name] }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red)">${res.error}</div></div>`;
+                return;
+            }
+
+            let html = `<div class="card" style="border-color:var(--orange)">
+                <div class="card-header"><h3>Comparison: HDNA vs ${name}</h3></div>
+                <div class="card-body">`;
+
+            html += `<div class="stat-row"><span class="label">Input Shape</span><span class="value">${JSON.stringify(res.input_shape)}</span></div>`;
+
+            Object.entries(res.results).forEach(([modelName, result]) => {
+                const color = modelName.includes('HDNA') ? 'var(--accent)' : 'var(--purple)';
+                html += `<div style="margin-top:8px;color:${color};font-weight:600;font-size:11px">${modelName} (${result.framework || '?'})</div>`;
+
+                if (result.error) {
+                    html += `<div style="color:var(--red);font-size:11px">${result.error}</div>`;
+                } else {
+                    const output = Array.isArray(result.output) ? result.output.map(v => v.toFixed(4)).join(', ') : JSON.stringify(result.output);
+                    html += `<div class="stat-row"><span class="label">Output</span><span class="value" style="font-size:10px;word-break:break-all">[${output}]</span></div>`;
+
+                    if (result.activations) {
+                        html += `<div style="margin-top:4px;font-size:10px;color:var(--text-dim)">Activations (${result.activations.length} layers):</div>`;
+                        result.activations.slice(0, 8).forEach(a => {
+                            html += `<div class="stat-row" style="font-size:10px">
+                                <span class="label">${a.layer}</span>
+                                <span class="value">mean=${a.mean.toFixed(4)}, std=${a.std.toFixed(4)}</span>
+                            </div>`;
+                        });
+                    }
+                }
+            });
+
+            html += `</div></div>`;
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red)">Error: ${err}</div></div>`;
+        }
     }
 
     // --- Accuracy Chart ---

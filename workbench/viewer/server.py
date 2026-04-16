@@ -15,9 +15,10 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 import numpy as np
 
-# Global reference to the adapter (set by launch())
-_adapter = None
-_trainer = None  # LiveTrainer instance
+# Global references (set by launch())
+_adapter = None          # primary model (HDNA)
+_models = {}             # name -> ModelAdapter (all loaded models)
+_trainer = None          # LiveTrainer instance
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 
 
@@ -54,6 +55,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._save_model())
         elif path == "/api/load":
             self._json_response(self._load_model())
+        elif path == "/api/models":
+            self._json_response(self._list_models())
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -69,7 +72,17 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         content_len = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_len) if content_len > 0 else b''
 
-        if path == "/api/train/start":
+        if path == "/api/models/load":
+            self._json_response(self._load_external_model(body))
+        elif path == "/api/models/list":
+            self._json_response(self._list_models())
+        elif path == "/api/models/inspect":
+            params = json.loads(body) if body else {}
+            self._json_response(self._inspect_model(params))
+        elif path == "/api/models/compare":
+            params = json.loads(body) if body else {}
+            self._json_response(self._compare_models(params))
+        elif path == "/api/train/start":
             self._json_response(self._train_start(body))
         elif path == "/api/train/step":
             params = json.loads(body) if body else {}
@@ -308,6 +321,181 @@ class ViewerHandler(SimpleHTTPRequestHandler):
                     "path": str(save_path)}
         except Exception as e:
             return {"error": str(e)}
+
+    # --- Multi-Model Management ---
+
+    def _load_external_model(self, body):
+        """Load a PyTorch, HuggingFace, or ONNX model."""
+        global _models
+        params = json.loads(body) if body else {}
+        model_type = params.get("type", "pytorch")  # pytorch, huggingface, onnx
+        model_path = params.get("path", "")
+        model_name = params.get("name", model_path or "external_model")
+
+        try:
+            if model_type == "huggingface":
+                from ..adapters.huggingface_adapter import HuggingFaceAdapter
+                adapter = HuggingFaceAdapter.from_pretrained(model_path)
+                adapter._name = model_name
+
+            elif model_type == "pytorch":
+                import torch
+                from ..adapters.pytorch_adapter import PyTorchAdapter
+                import workbench
+
+                if model_path and os.path.exists(model_path):
+                    model = torch.load(model_path, map_location="cpu",
+                                       weights_only=False)
+                else:
+                    # Demo: create a small model
+                    model = torch.nn.Sequential(
+                        torch.nn.Linear(24, 32),
+                        torch.nn.ReLU(),
+                        torch.nn.Linear(32, 16),
+                        torch.nn.ReLU(),
+                        torch.nn.Linear(16, 5),
+                    )
+                    model_name = model_name or "PyTorch Demo MLP"
+
+                model = workbench.inspect(model)
+                adapter = PyTorchAdapter(model, name=model_name, inspected=True)
+
+            elif model_type == "onnx":
+                from ..adapters.onnx_adapter import ONNXAdapter
+                adapter = ONNXAdapter(model_path, name=model_name)
+
+            else:
+                return {"error": f"Unknown model type: {model_type}"}
+
+            _models[model_name] = adapter
+            info = adapter.get_info()
+            return {
+                "status": "loaded",
+                "name": model_name,
+                "info": info.to_dict(),
+                "capabilities": str(adapter.capabilities()),
+                "total_models": len(_models),
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _list_models(self):
+        """List all loaded models with their info and capabilities."""
+        global _models
+
+        models = {}
+        # Always include the primary HDNA model
+        if _adapter:
+            info = _adapter.get_info()
+            models["HDNA (primary)"] = {
+                "info": info.to_dict(),
+                "capabilities": str(_adapter.capabilities()),
+                "type": "hdna",
+                "is_primary": True,
+            }
+
+        for name, adapter in _models.items():
+            info = adapter.get_info()
+            models[name] = {
+                "info": info.to_dict(),
+                "capabilities": str(adapter.capabilities()),
+                "type": info.framework,
+                "is_primary": False,
+            }
+
+        return {"models": models, "count": len(models)}
+
+    def _inspect_model(self, params):
+        """Run inspection on a specific loaded model."""
+        model_name = params.get("name", "")
+        input_data = params.get("input")
+
+        adapter = _models.get(model_name)
+        if not adapter:
+            return {"error": f"Model '{model_name}' not found"}
+
+        from ..tools.inspector import Inspector
+        inspector = Inspector(adapter)
+        result = inspector.summary()
+
+        # Run activation flow if input provided
+        if input_data is not None:
+            try:
+                inp = np.array(input_data, dtype=np.float32)
+                result["activation_flow"] = inspector.activation_flow(inp)
+                result["attention"] = inspector.attention_analysis(inp)
+            except Exception as e:
+                result["activation_error"] = str(e)
+
+        # Layer list
+        try:
+            result["layers"] = adapter.list_layers()
+        except Exception:
+            pass
+
+        return result
+
+    def _compare_models(self, params):
+        """Compare two or more models on the same input."""
+        model_names = params.get("models", [])
+        input_data = params.get("input")
+
+        if not input_data:
+            # Generate a random test input
+            input_data = np.random.random(24).tolist()
+
+        inp = np.array(input_data, dtype=np.float32)
+
+        results = {}
+
+        # Include primary HDNA model
+        if _adapter:
+            try:
+                output = _adapter.predict(inp)
+                results["HDNA (primary)"] = {
+                    "output": _safe_output(output),
+                    "framework": "hdna",
+                }
+            except Exception as e:
+                results["HDNA (primary)"] = {"error": str(e)}
+
+        # Include requested models
+        for name in model_names:
+            adapter = _models.get(name)
+            if not adapter:
+                results[name] = {"error": "not found"}
+                continue
+            try:
+                output = adapter.predict(inp.reshape(1, -1))
+                results[name] = {
+                    "output": _safe_output(output),
+                    "framework": adapter.get_info().framework,
+                }
+
+                # Get activations if available
+                from ..adapters.protocol import Capability
+                if adapter.has(Capability.ACTIVATIONS):
+                    acts = adapter.get_activations(inp.reshape(1, -1))
+                    results[name]["activations"] = [
+                        {"layer": a.layer_name, "shape": list(a.shape),
+                         "mean": round(float(np.mean(a.values)), 6),
+                         "std": round(float(np.std(a.values)), 6)}
+                        for a in acts
+                    ]
+
+                if adapter.has(Capability.ATTENTION):
+                    attns = adapter.get_attention(inp.reshape(1, -1))
+                    results[name]["attention"] = [
+                        {"layer": a.layer_name, "heads": a.num_heads,
+                         "metadata": a.metadata}
+                        for a in attns
+                    ]
+
+            except Exception as e:
+                results[name] = {"error": str(e)}
+
+        return {"input_shape": list(inp.shape), "results": results}
 
     # --- Training API ---
 
@@ -592,6 +780,16 @@ class LiveTrainer:
             "running": self.running,
             "curriculum": self.curriculum.progress,
         }
+
+
+def _safe_output(output):
+    """Convert model output to JSON-safe format."""
+    arr = np.asarray(output).flatten()
+    if len(arr) <= 20:
+        return arr.round(4).tolist()
+    return {"shape": list(np.asarray(output).shape),
+            "mean": round(float(arr.mean()), 4),
+            "std": round(float(arr.std()), 4)}
 
 
 def _serialize(obj):
