@@ -23,10 +23,12 @@ class HDNAViewer {
         this.renderer = null;
         this.neuronMeshes = {};    // neuron_id -> mesh
         this.edgeLines = [];
+        this.layerMeshes = [];     // for non-HDNA models
         this.labels = [];
         this.networkData = null;
         this.auditData = null;
         this.selectedNeuron = null;
+        this.activeModel = null;   // name of currently displayed model
         this.showEdges = true;
         this.showDead = false;
         this.showLabels = false;
@@ -190,15 +192,14 @@ class HDNAViewer {
             ]);
 
             // Header stats
-            document.getElementById('model-name').textContent = modelRes.name || 'HDNA Model';
-            document.getElementById('stat-neurons').textContent = networkRes.nodes ? networkRes.nodes.length : 0;
-            document.getElementById('stat-connections').textContent = networkRes.edges ? networkRes.edges.length : 0;
-            document.getElementById('stat-layers').textContent = networkRes.num_layers || 0;
-
-            const healthy = stressRes.is_healthy !== false;
-            const healthEl = document.getElementById('stat-health');
-            healthEl.textContent = healthy ? 'Healthy' : 'Warning';
-            healthEl.style.color = healthy ? 'var(--green)' : 'var(--orange)';
+            this.activeModel = 'HDNA (primary)';
+            this.updateHeader(
+                modelRes.name || 'HDNA Model',
+                networkRes.nodes ? networkRes.nodes.length : 0,
+                networkRes.edges ? networkRes.edges.length : 0,
+                networkRes.num_layers || 0,
+                'hdna'
+            );
 
             this.networkData = networkRes;
             this.auditData = auditRes;
@@ -482,6 +483,200 @@ class HDNAViewer {
             line.material.opacity = this.showEdges ? Math.min(0.6, 0.05 + str * 0.5) : 0;
         });
         this.selectedNeuron = null;
+    }
+
+    // --- Model switching ---
+
+    clearScene() {
+        // Remove all neuron meshes
+        Object.values(this.neuronMeshes).forEach(m => this.scene.remove(m));
+        this.neuronMeshes = {};
+
+        // Remove all edges
+        this.edgeLines.forEach(l => this.scene.remove(l));
+        this.edgeLines = [];
+
+        // Remove layer meshes (for PyTorch models)
+        this.layerMeshes.forEach(m => this.scene.remove(m));
+        this.layerMeshes = [];
+
+        this.closeNeuronDetail();
+    }
+
+    async switchToModel(name) {
+        this.clearScene();
+        this.activeModel = name;
+
+        if (name === 'HDNA (primary)' || name === null) {
+            // Switch back to HDNA — reload the network graph
+            const networkRes = await fetch('/api/network').then(r => r.json());
+            const modelRes = await fetch('/api/model').then(r => r.json());
+            this.networkData = networkRes;
+            this.buildNetwork(networkRes);
+            this.buildNeuronList(networkRes);
+            this.updateHeader(modelRes.name, networkRes.nodes.length,
+                networkRes.edges.length, networkRes.num_layers, 'hdna');
+        } else {
+            // External model — fetch inspection and build layer graph
+            try {
+                const res = await fetch('/api/models/inspect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name }),
+                }).then(r => r.json());
+
+                if (res.error) {
+                    console.error(res.error);
+                    return;
+                }
+
+                const info = res.info || {};
+                const layers = res.layers || [];
+                this.buildLayerGraph(name, layers, info);
+                this.buildExternalNeuronList(name, layers);
+                this.updateHeader(name, info.parameter_count || 0,
+                    layers.length, layers.length, info.framework || '?');
+            } catch (err) {
+                console.error('Failed to switch model:', err);
+            }
+        }
+
+        this.resetCamera();
+    }
+
+    updateHeader(name, neurons, connections, layers, framework) {
+        document.getElementById('model-name').textContent = name;
+        document.getElementById('stat-neurons').textContent =
+            typeof neurons === 'number' ? neurons.toLocaleString() : neurons;
+        document.getElementById('stat-connections').textContent = connections;
+        document.getElementById('stat-layers').textContent = layers;
+
+        const healthEl = document.getElementById('stat-health');
+        if (framework === 'hdna') {
+            healthEl.textContent = 'HDNA';
+            healthEl.style.color = 'var(--accent)';
+        } else {
+            healthEl.textContent = framework;
+            healthEl.style.color = 'var(--purple)';
+        }
+    }
+
+    buildLayerGraph(modelName, layers, info) {
+        // Build a 3D graph where each layer is a box/sphere
+        // Sized by parameter count, connected in sequence
+        if (!layers || layers.length === 0) return;
+
+        const maxParams = Math.max(1, ...layers.map(l => l.parameter_count || 1));
+        const spacing = 2.0;
+        const totalWidth = (layers.length - 1) * spacing;
+
+        layers.forEach((layer, i) => {
+            const x = (i - (layers.length - 1) / 2) * spacing;
+            const params = layer.parameter_count || 0;
+            const size = 0.15 + (params / maxParams) * 0.5;
+            const colorIdx = i % LAYER_COLORS.length;
+            const color = LAYER_COLORS[colorIdx];
+
+            // Use boxes for non-HDNA layers (visually distinct from HDNA spheres)
+            const geometry = new THREE.BoxGeometry(size, size * 1.5, size);
+            const material = new THREE.MeshPhongMaterial({
+                color: color,
+                emissive: color,
+                emissiveIntensity: 0.3,
+                transparent: params === 0,
+                opacity: params === 0 ? 0.3 : 1.0,
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, 0, 0);
+            mesh.userData = {
+                layerName: layer.name,
+                layerType: layer.type,
+                paramCount: params,
+                index: i,
+                inspectable: layer.inspectable || false,
+            };
+            this.scene.add(mesh);
+            this.layerMeshes.push(mesh);
+
+            // Connection to previous layer
+            if (i > 0) {
+                const prev = this.layerMeshes[i - 1];
+                const points = [prev.position.clone(), mesh.position.clone()];
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const lineMat = new THREE.LineBasicMaterial({
+                    color: 0x00d4ff,
+                    transparent: true,
+                    opacity: 0.4,
+                });
+                const line = new THREE.Line(lineGeo, lineMat);
+                this.scene.add(line);
+                this.edgeLines.push(line);
+            }
+
+            // Text label (using a sprite — simple approach)
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#e0e0e0';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+
+            // Shorten long names
+            let label = layer.type || layer.name;
+            if (label.length > 20) label = label.substring(0, 18) + '..';
+            ctx.fillText(label, 128, 20);
+
+            ctx.fillStyle = '#8892a4';
+            ctx.font = '11px sans-serif';
+            ctx.fillText(params > 0 ? params.toLocaleString() + ' params' : 'no params', 128, 40);
+
+            if (layer.inspectable) {
+                ctx.fillStyle = '#00e676';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('[INSPECTABLE]', 128, 55);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.position.set(x, -size - 0.4, 0);
+            sprite.scale.set(1.5, 0.4, 1);
+            this.scene.add(sprite);
+            this.layerMeshes.push(sprite);
+        });
+    }
+
+    buildExternalNeuronList(modelName, layers) {
+        // Repurpose the neuron list for external model layers
+        const container = document.getElementById('neuron-list');
+        if (!layers || layers.length === 0) {
+            container.innerHTML = '<div class="loading">No layers</div>';
+            return;
+        }
+
+        let html = `<div class="neuron-row" style="border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-weight:600;color:var(--text-dim);cursor:default">
+            <span class="nid">Layer</span>
+            <span class="layer-tag">Type</span>
+            <span class="activation">Params</span>
+            <span class="status">Insp.</span>
+        </div>`;
+
+        layers.forEach((layer, i) => {
+            const color = LAYER_COLORS[i % LAYER_COLORS.length];
+            const hex = '#' + color.toString(16).padStart(6, '0');
+            const inspectable = layer.inspectable ? '<span style="color:var(--green)">YES</span>' : '<span style="color:var(--text-dim)">---</span>';
+
+            html += `<div class="neuron-row">
+                <span class="nid" style="color:${hex}">${layer.name}</span>
+                <span class="layer-tag">${layer.type}</span>
+                <span class="activation">${(layer.parameter_count || 0).toLocaleString()}</span>
+                <span class="status">${inspectable}</span>
+            </div>`;
+        });
+
+        container.innerHTML = html;
     }
 
     // --- Side panel builders ---
@@ -964,11 +1159,17 @@ class HDNAViewer {
                         <div class="stat-row"><span class="label">Layers</span><span class="value">${info.layer_count || 0}</span></div>
                         <div class="stat-row"><span class="label">Capabilities</span><span class="value" style="font-size:10px;word-break:break-all">${model.capabilities}</span></div>`;
 
-                if (!isPrimary) {
+                {
+                    const escapedName = name.replace(/'/g, "\\'");
+                    const viewLabel = (isPrimary && this.activeModel !== name && this.activeModel !== null)
+                        ? 'View' : (!isPrimary ? 'View' : '');
                     html += `<div style="margin-top:6px;display:flex;gap:4px">
-                        <button onclick="app.inspectModel('${name}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--accent);border-radius:3px;cursor:pointer;font-size:11px">Inspect</button>
-                        <button onclick="app.compareWithPrimary('${name}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--orange);border-radius:3px;cursor:pointer;font-size:11px">Compare vs HDNA</button>
-                    </div>`;
+                        <button onclick="app.switchToModel('${escapedName}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--accent);color:var(--accent);border-radius:3px;cursor:pointer;font-size:11px">View</button>`;
+                    if (!isPrimary) {
+                        html += `<button onclick="app.inspectModel('${escapedName}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer;font-size:11px">Inspect</button>
+                        <button onclick="app.compareWithPrimary('${escapedName}')" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--orange);border-radius:3px;cursor:pointer;font-size:11px">Compare</button>`;
+                    }
+                    html += `</div>`;
                 }
 
                 html += `</div></div>`;
