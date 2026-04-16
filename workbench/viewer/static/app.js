@@ -807,6 +807,73 @@ class HDNAViewer {
         // Labels handled in render loop via CSS labels or sprite text
     }
 
+    // --- Save / Load ---
+
+    async saveModel() {
+        try {
+            const res = await fetch('/api/save').then(r => r.json());
+            if (res.error) {
+                alert('Save failed: ' + res.error);
+            } else {
+                alert('Model saved! (' + res.neurons + ' neurons)');
+            }
+        } catch (err) {
+            alert('Save failed: ' + err);
+        }
+    }
+
+    async loadModel() {
+        try {
+            const res = await fetch('/api/load').then(r => r.json());
+            if (res.error) {
+                alert('Load failed: ' + res.error);
+            } else {
+                alert('Model loaded! (' + res.neurons + ' neurons). Refreshing...');
+                // Reload the entire view with new network
+                location.reload();
+            }
+        } catch (err) {
+            alert('Load failed: ' + err);
+        }
+    }
+
+    // --- Live neuron refresh during training ---
+
+    async refreshSelectedNeuronLive(neuronStates) {
+        // Quick update of the neuron detail panel during training
+        // without a full API call — use the states we already have
+        if (this.selectedNeuron === null) return;
+        const panel = document.getElementById('neuron-detail');
+        if (!panel.classList.contains('visible')) return;
+
+        const state = neuronStates[this.selectedNeuron];
+        if (!state) return;
+
+        // Fetch full neuron data (routing etc) from server
+        try {
+            const res = await fetch(`/api/neuron?id=${this.selectedNeuron}`).then(r => r.json());
+            // Build a fake replay context with current training state
+            const fakeReplay = {
+                step: 'LIVE',
+                record: {},
+                neuron_activations: {},
+                neuron_normalized: {},
+                hot_edges: [],
+            };
+            // Fill from all neuron states
+            let maxAct = 0.001;
+            Object.entries(neuronStates).forEach(([nid, s]) => {
+                fakeReplay.neuron_activations[parseInt(nid)] = s.activation;
+                if (s.activation > maxAct) maxAct = s.activation;
+            });
+            Object.entries(neuronStates).forEach(([nid, s]) => {
+                fakeReplay.neuron_normalized[parseInt(nid)] = s.activation / maxAct;
+            });
+
+            this.showNeuronDetail(res, fakeReplay);
+        } catch (err) {}
+    }
+
     // --- Live Training ---
 
     async toggleTraining() {
@@ -914,6 +981,16 @@ class HDNAViewer {
                 `${s.correct ? 'OK' : 'X'}</span>`
             ).join(' ');
 
+            // Show interventions
+            data.steps.forEach(s => {
+                if (s.intervention) {
+                    const info = s.intervention;
+                    document.getElementById('train-last').innerHTML +=
+                        `<div style="color:var(--orange);margin-top:2px">` +
+                        `Homeostasis: pruned ${info.pruned}, spawned ${info.spawned}</div>`;
+                }
+            });
+
             // Pulse the training indicator
             const pulse = document.getElementById('train-pulse');
             pulse.style.opacity = pulse.style.opacity === '0.3' ? '1' : '0.3';
@@ -921,6 +998,11 @@ class HDNAViewer {
             // Update header stats
             document.getElementById('stat-neurons').textContent =
                 Object.keys(data.neuron_states).length;
+
+            // Refresh neuron detail if one is selected
+            if (this.selectedNeuron !== null) {
+                this.refreshSelectedNeuronLive(data.neuron_states);
+            }
 
         } catch (err) {
             console.error('Train step failed:', err);

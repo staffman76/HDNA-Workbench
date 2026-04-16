@@ -11,6 +11,7 @@ import os
 import threading
 import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 import numpy as np
 
@@ -49,6 +50,10 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         elif path == "/api/replay":
             step = int(params.get("step", [0])[0])
             self._json_response(self._get_replay(step))
+        elif path == "/api/save":
+            self._json_response(self._save_model())
+        elif path == "/api/load":
+            self._json_response(self._load_model())
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -248,6 +253,62 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             return {"error": str(e)}
 
+    # --- Save / Load ---
+
+    def _save_model(self):
+        if _adapter is None:
+            return {"error": "No model loaded"}
+        try:
+            save_dir = Path(_static_dir).parent / "saves"
+            save_dir.mkdir(exist_ok=True)
+            save_path = save_dir / "model_state.json"
+
+            data = {
+                "network": _adapter._network.to_dict(),
+                "brain": {
+                    "epsilon": _adapter._brain.epsilon if _adapter._brain else 0.3,
+                    "episodes": _adapter._brain.episodes if _adapter._brain else 0,
+                    "total_reward": _adapter._brain.total_reward if _adapter._brain else 0,
+                    "lr": _adapter._brain.lr if _adapter._brain else 0.01,
+                },
+                "audit_stats": _adapter._audit.stats() if _adapter._audit else {},
+            }
+
+            save_path.write_text(json.dumps(data, default=_serialize, indent=2))
+            return {"status": "saved", "path": str(save_path),
+                    "neurons": len(_adapter._network.neurons)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _load_model(self):
+        if _adapter is None:
+            return {"error": "No model loaded"}
+        try:
+            save_dir = Path(_static_dir).parent / "saves"
+            save_path = save_dir / "model_state.json"
+
+            if not save_path.exists():
+                return {"error": "No saved model found"}
+
+            data = json.loads(save_path.read_text())
+
+            from ..core.neuron import HDNANetwork
+            loaded_net = HDNANetwork.from_dict(data["network"])
+
+            # Replace the adapter's network
+            _adapter._network = loaded_net
+            if _adapter._brain:
+                _adapter._brain.net = loaded_net
+                brain_data = data.get("brain", {})
+                _adapter._brain.epsilon = brain_data.get("epsilon", 0.3)
+                _adapter._brain.episodes = brain_data.get("episodes", 0)
+                _adapter._brain.total_reward = brain_data.get("total_reward", 0)
+
+            return {"status": "loaded", "neurons": len(loaded_net.neurons),
+                    "path": str(save_path)}
+        except Exception as e:
+            return {"error": str(e)}
+
     # --- Training API ---
 
     def _train_start(self, body):
@@ -336,6 +397,7 @@ class LiveTrainer:
 
     def __init__(self, adapter, curriculum_name="math", phases=3):
         from ..curricula import math_curriculum, language_curriculum, spatial_curriculum
+        from ..core.stress import StressMonitor, HomeostasisDaemon, apply_interventions
 
         self.adapter = adapter
         self.net = adapter._network
@@ -347,6 +409,11 @@ class LiveTrainer:
         self.total_reward = 0.0
         self.running = True
         self._recent = []  # last 50 results for rolling accuracy
+        self._interventions = []  # log of homeostasis actions
+
+        # Stress monitoring and homeostasis
+        self.monitor = StressMonitor()
+        self.homeostasis = HomeostasisDaemon(monitor=self.monitor)
 
         # Build curriculum
         if curriculum_name == "language":
@@ -371,6 +438,7 @@ class LiveTrainer:
 
         # Get proposals and Q-values
         proposals = []
+        selected = None
         if self.coordinator:
             proposals = self.coordinator.collect_proposals(None, features, self.rng)
 
@@ -389,9 +457,15 @@ class LiveTrainer:
         correct = (action == task.expected_output)
         reward = 1.0 if correct else -0.2
 
-        # Learn
+        # Learn (with stronger signal)
         if self.brain:
-            next_features = self.rng.random(len(features))
+            # Use actual next task features instead of random noise
+            next_result = self.curriculum.get_task(self.rng)
+            if next_result:
+                _, next_task = next_result
+                next_features = next_task.features if next_task.features is not None else self.rng.random(len(features))
+            else:
+                next_features = self.rng.random(len(features))
             self.brain.learn(features, action, reward, next_features, done=False)
 
         if correct:
@@ -409,6 +483,73 @@ class LiveTrainer:
         if len(self._recent) > 50:
             self._recent.pop(0)
 
+        # --- Homeostasis: health check and intervention every 50 episodes ---
+        intervention_info = None
+        if self.episode % 50 == 0 and self.episode > 20:
+            from ..core.stress import apply_interventions
+            report = self.monitor.snapshot(self.net, self.episode)
+
+            # Check for dead neurons and fix them
+            dead_count = sum(1 for n in self.net.neurons.values()
+                            if n.is_dead and "output" not in n.tags)
+            total_hidden = sum(1 for n in self.net.neurons.values()
+                              if "output" not in n.tags)
+
+            if dead_count > total_hidden * 0.3:
+                # Too many dead neurons — prune and spawn fresh ones
+                pruned = self.net.prune_dead_neurons()
+                spawned = 0
+                # Spawn replacements in the most depleted layer
+                layer_sizes = self.net.layer_sizes
+                for layer_idx in range(1, self.net.num_layers - 1):
+                    current = layer_sizes.get(layer_idx, 0)
+                    # Spawn up to the original size
+                    needed = max(0, min(len(pruned), 4) - spawned)
+                    for _ in range(needed):
+                        prev_layer = layer_idx - 1
+                        prev_neurons = self.net.get_layer_neurons(prev_layer) if prev_layer > 0 else []
+                        n_in = len(prev_neurons) if prev_neurons else self.net.input_dim
+                        nid = self.net.add_neuron(
+                            n_inputs=n_in, layer=layer_idx,
+                            tags={"hidden", "spawned"}, rng=self.rng
+                        )
+                        # Connect to/from adjacent layers
+                        if prev_neurons:
+                            for pn in prev_neurons:
+                                strength = self.rng.normal(0, np.sqrt(2.0 / n_in))
+                                self.net.connect(pn.neuron_id, nid, float(strength))
+                        next_neurons = self.net.get_layer_neurons(layer_idx + 1)
+                        for nn in next_neurons:
+                            strength = self.rng.normal(0, np.sqrt(2.0 / max(1, current + 1)))
+                            self.net.connect(nid, nn.neuron_id, float(strength))
+                        spawned += 1
+
+                intervention_info = {
+                    "type": "homeostasis",
+                    "pruned": len(pruned),
+                    "spawned": spawned,
+                    "dead_before": dead_count,
+                }
+                self._interventions.append(intervention_info)
+
+            # Adaptive learning rate: boost if accuracy is stuck
+            if self.brain and len(self._recent) >= 50:
+                acc = sum(self._recent) / len(self._recent)
+                if acc < 0.25:
+                    # Stuck at random chance — increase exploration and learning rate
+                    self.brain.epsilon = min(0.6, self.brain.epsilon + 0.05)
+                    self.brain.lr = min(0.05, self.brain.lr * 1.2)
+                elif acc > 0.6:
+                    # Doing well — tighten exploration
+                    self.brain.epsilon = max(0.05, self.brain.epsilon * 0.95)
+
+        # Decay epsilon normally
+        if self.brain and self.episode % 10 == 0:
+            self.brain.epsilon = max(
+                self.brain.epsilon_min,
+                self.brain.epsilon * self.brain.epsilon_decay
+            )
+
         # Record in audit log
         from ..core.audit import PredictionRecord
         self.adapter._audit.record(PredictionRecord(
@@ -420,7 +561,7 @@ class LiveTrainer:
             reward=reward,
         ))
 
-        return {
+        result_dict = {
             "episode": self.episode,
             "action": action,
             "expected": int(task.expected_output),
@@ -429,7 +570,11 @@ class LiveTrainer:
             "level": level.name,
             "accuracy_50": round(sum(self._recent) / max(1, len(self._recent)), 4),
             "epsilon": round(self.brain.epsilon, 4) if self.brain else 0,
+            "lr": round(self.brain.lr, 5) if self.brain else 0,
         }
+        if intervention_info:
+            result_dict["intervention"] = intervention_info
+        return result_dict
 
     def stats(self):
         return {
