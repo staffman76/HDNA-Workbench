@@ -107,6 +107,11 @@ else:
     brain = Brain(net, epsilon=0.3, learning_rate=0.01)
     print(f"Built: {len(net.neurons)} neurons")
 
+    # Run a few forward passes to populate neuron memories
+    print("Warming up neuron activations...")
+    for _ in range(50):
+        net.forward(rng.random(net.input_dim))
+
 # Set up daemons — these do the actual reasoning
 coordinator = Coordinator(scaffold_decay_rate=0.002, scaffold_floor=0.7)
 pattern_daemon = FeaturePatternDaemon("pattern", num_actions=5,

@@ -760,7 +760,7 @@ class HDNAViewer {
             html += `<div class="audit-row" onclick="app.seekTrace(${data.records.length - 1 - i})">
                 <span class="step">${r.step}</span>
                 <span class="prediction">C${r.chosen_class}</span>
-                <span class="confidence">${(r.confidence * 100).toFixed(0)}%</span>
+                <span class="confidence">${(Math.min(1, Math.max(0, r.confidence)) * 100).toFixed(0)}%</span>
                 <span class="result ${r.correct ? 'correct' : 'wrong'}">${r.correct ? 'OK' : 'X'}</span>
                 <span style="color:var(--text-dim);font-size:10px">${r.source}</span>
             </div>`;
@@ -1205,7 +1205,7 @@ class HDNAViewer {
                                              '<span style="color:var(--red)">&#10007;</span>';
                     html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
                         <span>${icon} Decision #${r.step}</span>
-                        <span style="color:var(--text-dim)">Confidence: ${(r.confidence * 100).toFixed(0)}%</span>
+                        <span style="color:var(--text-dim)">Confidence: ${(Math.min(1, Math.max(0, r.confidence)) * 100).toFixed(0)}%</span>
                         <span style="color:var(--text-dim)">${r.source}</span>
                     </div>`;
                 });
