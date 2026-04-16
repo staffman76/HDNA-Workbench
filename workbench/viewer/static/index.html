@@ -281,20 +281,46 @@
 
                 <!-- Daemons -->
                 <div class="card">
-                    <div class="card-header"><h3>Daemons</h3></div>
+                    <div class="card-header"><h3>Active Daemons</h3></div>
                     <div class="card-body">
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Reasoning modules. Pattern daemon learns from examples. Math daemon uses operator profiles.</div>
-                        <div id="build-daemons">
-                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
-                                <input type="checkbox" id="build-d-pattern" checked> Pattern Matching
-                            </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
-                                <input type="checkbox" id="build-d-math" checked> Math Specialist
-                            </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
-                                <input type="checkbox" id="build-d-feature"> Feature Group
-                            </label>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Reasoning modules that propose actions. The coordinator selects the best proposal.</div>
+                        <div id="build-daemon-list"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+                        <h3>Add Daemon</h3>
+                        <span class="toggle">&#9660;</span>
+                    </div>
+                    <div class="card-body">
+                        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Template</div>
+                        <select id="daemon-template" onchange="app.updateDaemonForm()" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:6px">
+                            <option value="pattern">Pattern Matching — learns feature-action profiles via cosine similarity</option>
+                            <option value="math">Math Specialist — per-operator profiles using feature flags</option>
+                            <option value="feature_group">Feature Group — picks action with strongest feature region</option>
+                            <option value="threshold">Threshold — fires when a specific feature exceeds a value</option>
+                            <option value="argmax">Argmax — picks the highest feature index</option>
+                            <option value="random">Random — baseline for comparison</option>
+                            <option value="custom">Custom Function — write your own logic</option>
+                        </select>
+                        <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Name</div>
+                        <input id="daemon-name" type="text" placeholder="my_daemon" style="width:100%;padding:4px 6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;margin-bottom:6px">
+
+                        <!-- Template-specific parameters -->
+                        <div id="daemon-params">
+                            <div style="font-size:10px;color:var(--text-dim)">This daemon learns from correct answers automatically</div>
                         </div>
+
+                        <!-- Custom function editor -->
+                        <div id="daemon-custom-editor" style="display:none;margin-top:6px">
+                            <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Function body (receives: features, num_actions, rng)</div>
+                            <textarea id="daemon-custom-code" style="width:100%;height:80px;padding:6px;background:var(--bg-dark);border:1px solid var(--border);color:var(--accent);border-radius:3px;font-size:11px;font-family:monospace;resize:vertical"># Return (action_index, confidence, reasoning) or None to abstain
+max_idx = int(np.argmax(features[:num_actions]))
+return (max_idx, float(features[max_idx]), "custom logic")</textarea>
+                            <div style="font-size:9px;color:var(--text-dim);margin-top:2px">Available: np (numpy), features (array), num_actions (int), rng (generator)</div>
+                        </div>
+
+                        <button onclick="app.addDaemon()" style="width:100%;padding:6px;margin-top:6px;background:var(--bg-card);border:1px solid var(--green);color:var(--green);border-radius:3px;cursor:pointer;font-size:12px">+ Add Daemon</button>
                     </div>
                 </div>
 

@@ -59,6 +59,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._list_models())
         elif path == "/api/curricula":
             self._json_response(self._list_curricula())
+        elif path == "/api/daemons/active":
+            self._json_response(self._list_active_daemons())
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -86,6 +88,12 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._compare_models(params))
         elif path == "/api/curricula/list":
             self._json_response(self._list_curricula())
+        elif path == "/api/daemons/add":
+            self._json_response(self._add_daemon(body))
+        elif path == "/api/daemons/remove":
+            self._json_response(self._remove_daemon(body))
+        elif path == "/api/daemons/list":
+            self._json_response(self._list_active_daemons())
         elif path == "/api/curricula/load_file":
             self._json_response(self._load_curriculum_file(body))
         elif path == "/api/network/rebuild":
@@ -330,7 +338,302 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             return {"error": str(e)}
 
-    # --- Curriculum Management ---
+    # --- Daemon Management ---
+
+    def _list_active_daemons(self):
+        if _adapter is None or _adapter._coordinator is None:
+            return {"daemons": []}
+        daemons = []
+        for name, daemon in _adapter._coordinator.daemons.items():
+            daemons.append({
+                "name": name,
+                "type": type(daemon).__name__,
+                "domain": daemon.domain,
+                "description": daemon.description,
+                "phase": daemon.phase.name,
+                "enabled": daemon.enabled,
+                "proposals": daemon.proposals_made,
+                "accepted": daemon.proposals_accepted,
+                "acceptance_rate": round(daemon.acceptance_rate, 4),
+            })
+        return {"daemons": daemons}
+
+    def _add_daemon(self, body):
+        if _adapter is None or _adapter._coordinator is None:
+            return {"error": "No model or coordinator"}
+
+        params = json.loads(body) if body else {}
+        template = params.get("template", "pattern")
+        name = params.get("name", f"daemon_{len(_adapter._coordinator.daemons)}")
+        num_actions = params.get("num_actions", _adapter._network.output_dim)
+        custom_code = params.get("custom_code", "")
+
+        # Check for duplicate name
+        if name in _adapter._coordinator.daemons:
+            return {"error": f"Daemon '{name}' already exists"}
+
+        try:
+            daemon = self._create_daemon(template, name, num_actions,
+                                          params, custom_code)
+            _adapter._coordinator.register(daemon)
+            return {
+                "status": "added",
+                "name": name,
+                "type": type(daemon).__name__,
+                "total_daemons": len(_adapter._coordinator.daemons),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _remove_daemon(self, body):
+        if _adapter is None or _adapter._coordinator is None:
+            return {"error": "No model or coordinator"}
+
+        params = json.loads(body) if body else {}
+        name = params.get("name", "")
+
+        if name not in _adapter._coordinator.daemons:
+            return {"error": f"Daemon '{name}' not found"}
+
+        _adapter._coordinator.unregister(name)
+        return {"status": "removed", "name": name}
+
+    def _create_daemon(self, template, name, num_actions, params, custom_code):
+        """Create a daemon from a template specification."""
+        from ..core.daemon import Daemon, Proposal
+
+        if template == "pattern":
+            # Import from __main__ won't work, recreate inline
+            return _make_pattern_daemon(name, num_actions)
+
+        elif template == "math":
+            return _make_math_daemon(name, num_actions)
+
+        elif template == "feature_group":
+            return _make_feature_group_daemon(name, num_actions)
+
+        elif template == "threshold":
+            target_feature = params.get("target_feature", 0)
+            threshold = params.get("threshold", 0.5)
+            action = params.get("action", 0)
+
+            class ThresholdD(Daemon):
+                def __init__(self):
+                    super().__init__(name=name, domain="threshold",
+                                    description=f"Fires when feature[{target_feature}] > {threshold}")
+                    self.tf = target_feature
+                    self.th = threshold
+                    self.act = action
+                def reason(self, state, features, rng=None):
+                    if features is not None and len(features) > self.tf:
+                        if features[self.tf] >= self.th:
+                            return Proposal(action=self.act,
+                                            confidence=float(min(1.0, features[self.tf])),
+                                            reasoning=f"feat[{self.tf}]={features[self.tf]:.3f} >= {self.th}",
+                                            source=self.name)
+                    return None
+            return ThresholdD()
+
+        elif template == "argmax":
+            class ArgmaxD(Daemon):
+                def __init__(self):
+                    super().__init__(name=name, domain="argmax",
+                                    description="Picks highest feature index")
+                    self.na = num_actions
+                def reason(self, state, features, rng=None):
+                    if features is not None and len(features) > 0:
+                        idx = int(np.argmax(features)) % self.na
+                        return Proposal(action=idx,
+                                        confidence=float(min(1.0, np.max(features))),
+                                        reasoning=f"argmax={idx}",
+                                        source=self.name)
+                    return None
+            return ArgmaxD()
+
+        elif template == "random":
+            class RandomD(Daemon):
+                def __init__(self):
+                    super().__init__(name=name, domain="baseline",
+                                    description="Random baseline")
+                    self.na = num_actions
+                def reason(self, state, features, rng=None):
+                    r = rng or np.random.default_rng()
+                    return Proposal(action=int(r.integers(0, self.na)),
+                                    confidence=1.0 / self.na,
+                                    reasoning="random",
+                                    source=self.name)
+            return RandomD()
+
+        elif template == "custom":
+            if not custom_code.strip():
+                raise ValueError("No custom code provided")
+
+            # Create a daemon from user code
+            # The code should return (action, confidence, reasoning) or None
+            class CustomD(Daemon):
+                def __init__(self):
+                    super().__init__(name=name, domain="custom",
+                                    description="Custom function daemon")
+                    self.code = custom_code
+                    self.na = num_actions
+                def reason(self, state, features, rng=None):
+                    try:
+                        local_vars = {
+                            'features': features,
+                            'num_actions': self.na,
+                            'rng': rng or np.random.default_rng(),
+                            'np': np,
+                        }
+                        exec(self.code, {}, local_vars)
+                        result = local_vars.get('result', local_vars.get('__builtins__'))
+                        # Check if the code used return-style (won't work with exec)
+                        # Instead, look for the last expression
+                        # Try eval on last line
+                    except:
+                        pass
+                    # Use eval approach instead
+                    try:
+                        local_vars = {
+                            'features': features,
+                            'num_actions': self.na,
+                            'rng': rng or np.random.default_rng(),
+                            'np': np,
+                        }
+                        # Wrap code to capture return value
+                        wrapped = "def _daemon_fn(features, num_actions, rng, np):\n"
+                        for line in self.code.strip().split('\n'):
+                            wrapped += "    " + line + "\n"
+                        exec(wrapped, local_vars)
+                        result = local_vars['_daemon_fn'](features, self.na,
+                                                           rng or np.random.default_rng(), np)
+                        if result is None:
+                            return None
+                        if isinstance(result, tuple) and len(result) >= 2:
+                            return Proposal(
+                                action=int(result[0]),
+                                confidence=float(result[1]),
+                                reasoning=result[2] if len(result) > 2 else "custom",
+                                source=self.name)
+                    except Exception as e:
+                        return Proposal(action=0, confidence=0.01,
+                                        reasoning=f"error: {e}", source=self.name)
+                    return None
+            return CustomD()
+
+        else:
+            raise ValueError(f"Unknown template: {template}")
+
+
+def _make_pattern_daemon(name, num_actions):
+    """Create a pattern matching daemon (same as __main__.py version)."""
+    from ..core.daemon import Daemon, Proposal
+
+    class PD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="pattern",
+                             description="Learns feature-action profiles")
+            self.num_actions = num_actions
+            self.action_profiles = {}
+            self.action_counts = {}
+        def reason(self, state, features, rng=None):
+            if features is None or len(features) == 0: return None
+            if not self.action_profiles:
+                return Proposal(action=int(np.argmax(np.abs(features))) % self.num_actions,
+                               confidence=0.3, reasoning="no history",
+                               source=self.name)
+            best_action, best_sim = 0, -1
+            for action, profile in self.action_profiles.items():
+                nf = np.linalg.norm(features)
+                np_ = np.linalg.norm(profile)
+                sim = float(np.dot(features, profile) / (nf * np_ + 1e-8)) if nf > 0 and np_ > 0 else 0
+                if sim > best_sim: best_sim, best_action = sim, action
+            return Proposal(action=best_action,
+                           confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
+                           reasoning=f"profile match (sim={best_sim:.3f})",
+                           source=self.name)
+        def learn_from_outcome(self, features, action, correct):
+            if not correct: return
+            if action not in self.action_profiles:
+                self.action_profiles[action] = features.copy()
+                self.action_counts[action] = 1
+            else:
+                c = self.action_counts[action]
+                self.action_profiles[action] = (self.action_profiles[action] * c + features) / (c + 1)
+                self.action_counts[action] = c + 1
+    return PD()
+
+
+def _make_math_daemon(name, num_actions):
+    """Create a math specialist daemon."""
+    from ..core.daemon import Daemon, Proposal
+
+    class MD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="math",
+                             description="Per-operator math profiles")
+            self.num_actions = num_actions
+            self.op_profiles = {}
+            self.op_counts = {}
+        def _get_op_key(self, features):
+            ops = features[5:12] if len(features) > 11 else np.zeros(7)
+            return int(np.argmax(ops)) if np.max(ops) > 0.5 else -1
+        def reason(self, state, features, rng=None):
+            if features is None: return None
+            op = self._get_op_key(features)
+            best_action, best_sim = 0, -1
+            for action in range(self.num_actions):
+                key = (op, action)
+                if key in self.op_profiles:
+                    profile = self.op_profiles[key]
+                    nf = np.linalg.norm(features)
+                    np_ = np.linalg.norm(profile)
+                    sim = float(np.dot(features, profile) / (nf * np_ + 1e-8))
+                    if sim > best_sim: best_sim, best_action = sim, action
+            if best_sim < 0: return None
+            return Proposal(action=best_action,
+                           confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
+                           reasoning=f"op={op} (sim={best_sim:.3f})",
+                           source=self.name)
+        def learn_from_outcome(self, features, action, correct):
+            if not correct: return
+            op = self._get_op_key(features)
+            key = (op, action)
+            if key not in self.op_profiles:
+                self.op_profiles[key] = features.copy()
+                self.op_counts[key] = 1
+            else:
+                c = self.op_counts[key]
+                self.op_profiles[key] = (self.op_profiles[key] * c + features) / (c + 1)
+                self.op_counts[key] = c + 1
+    return MD()
+
+
+def _make_feature_group_daemon(name, num_actions):
+    """Create a feature group daemon."""
+    from ..core.daemon import Daemon, Proposal
+
+    class FGD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="feature_group",
+                             description="Feature group heuristic")
+            self.num_actions = num_actions
+        def reason(self, state, features, rng=None):
+            if features is None or len(features) == 0: return None
+            group_size = max(1, len(features) // self.num_actions)
+            scores = []
+            for i in range(self.num_actions):
+                start = i * group_size
+                end = min(start + group_size, len(features))
+                scores.append(float(np.sum(np.abs(features[start:end]))))
+            action = int(np.argmax(scores))
+            total = sum(scores) + 1e-8
+            return Proposal(action=action,
+                           confidence=scores[action] / total,
+                           reasoning=f"group {action} ({scores[action]:.2f})",
+                           source=self.name)
+    return FGD()
+
+
 
     def _list_curricula(self):
         from ..curricula.registry import list_curricula

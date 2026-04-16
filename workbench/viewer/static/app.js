@@ -212,6 +212,8 @@ class HDNAViewer {
             this.buildDaemonPanel(daemonRes);
             this.refreshModelsList();
             this.refreshCurriculaDropdown();
+            this.refreshDaemonList();
+            this.updateDaemonForm();
 
             // Set trace slider range
             if (auditRes.records && auditRes.records.length > 0) {
@@ -1310,6 +1312,153 @@ class HDNAViewer {
             </div>`;
         });
         container.innerHTML = html;
+    }
+
+    // --- Daemon Builder ---
+
+    updateDaemonForm() {
+        const template = document.getElementById('daemon-template').value;
+        const paramsDiv = document.getElementById('daemon-params');
+        const customEditor = document.getElementById('daemon-custom-editor');
+
+        customEditor.style.display = template === 'custom' ? 'block' : 'none';
+
+        const descriptions = {
+            'pattern': 'Learns feature-action profiles via cosine similarity. Improves automatically from correct answers.',
+            'math': 'Separate profiles per operator type. Best for math curricula where features encode operators.',
+            'feature_group': 'Divides features into groups (one per action) and picks the group with highest total.',
+            'threshold': 'Fires when a specific feature exceeds a threshold. Good for known decision boundaries.',
+            'argmax': 'Simply picks the action matching the highest feature index. Fast baseline.',
+            'random': 'Random selection. Use to measure how much better your other daemons are.',
+            'custom': 'Write your own reasoning logic. Full control.',
+        };
+
+        let html = `<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${descriptions[template] || ''}</div>`;
+
+        if (template === 'threshold') {
+            html += `
+                <div style="display:flex;gap:4px;margin-bottom:4px">
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-dim)">Feature Index</div>
+                        <input id="dp-target-feature" type="number" value="0" min="0" style="width:100%;padding:3px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px">
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-dim)">Threshold</div>
+                        <input id="dp-threshold" type="number" value="0.5" step="0.1" style="width:100%;padding:3px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px">
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-dim)">Action</div>
+                        <input id="dp-action" type="number" value="0" min="0" style="width:100%;padding:3px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px">
+                    </div>
+                </div>`;
+        }
+
+        paramsDiv.innerHTML = html;
+    }
+
+    async refreshDaemonList() {
+        const container = document.getElementById('build-daemon-list');
+        if (!container) return;
+
+        try {
+            const data = await fetch('/api/daemons/active').then(r => r.json());
+            const daemons = data.daemons || [];
+
+            if (daemons.length === 0) {
+                container.innerHTML = '<div style="color:var(--text-dim);font-size:11px">No daemons active</div>';
+                return;
+            }
+
+            let html = '';
+            daemons.forEach(d => {
+                const phaseColors = {
+                    'APPRENTICE': 'var(--text-dim)', 'JOURNEYMAN': 'var(--orange)',
+                    'COMPETENT': 'var(--accent)', 'EXPERT': 'var(--green)',
+                    'INDEPENDENT': 'var(--purple)',
+                };
+                const pc = phaseColors[d.phase] || 'var(--text-dim)';
+                const rate = (d.acceptance_rate * 100).toFixed(0);
+                const escapedName = d.name.replace(/'/g, "\\'");
+
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:11px">
+                    <div>
+                        <span style="color:var(--accent);font-weight:600">${d.name}</span>
+                        <span style="color:var(--text-dim);margin-left:4px">${d.type}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <span style="color:${pc};font-size:10px">${d.phase}</span>
+                        <span style="color:var(--text-dim);font-size:10px">${rate}%</span>
+                        <span onclick="app.removeDaemon('${escapedName}')" style="color:var(--red);cursor:pointer;font-size:13px" title="Remove">&times;</span>
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<div style="color:var(--red);font-size:11px">Error: ${err}</div>`;
+        }
+    }
+
+    async addDaemon() {
+        const template = document.getElementById('daemon-template').value;
+        const name = document.getElementById('daemon-name').value.trim();
+
+        if (!name) {
+            alert('Enter a daemon name');
+            return;
+        }
+
+        const params = {
+            template: template,
+            name: name,
+            num_actions: parseInt(document.getElementById('build-output')?.value) || 5,
+        };
+
+        // Template-specific params
+        if (template === 'threshold') {
+            params.target_feature = parseInt(document.getElementById('dp-target-feature')?.value) || 0;
+            params.threshold = parseFloat(document.getElementById('dp-threshold')?.value) || 0.5;
+            params.action = parseInt(document.getElementById('dp-action')?.value) || 0;
+        }
+
+        if (template === 'custom') {
+            params.custom_code = document.getElementById('daemon-custom-code').value;
+        }
+
+        try {
+            const res = await fetch('/api/daemons/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Failed: ' + res.error);
+            } else {
+                document.getElementById('daemon-name').value = '';
+                this.refreshDaemonList();
+            }
+        } catch (err) {
+            alert('Failed: ' + err);
+        }
+    }
+
+    async removeDaemon(name) {
+        try {
+            const res = await fetch('/api/daemons/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert(res.error);
+            } else {
+                this.refreshDaemonList();
+            }
+        } catch (err) {
+            alert('Failed: ' + err);
+        }
     }
 
     // --- Build Tab ---
