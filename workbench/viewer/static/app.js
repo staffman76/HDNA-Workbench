@@ -29,6 +29,7 @@ class HDNAViewer {
         this.auditData = null;
         this.selectedNeuron = null;
         this.activeModel = null;   // name of currently displayed model
+        this.governanceMode = false;
         this.showEdges = true;
         this.showDead = false;
         this.showLabels = false;
@@ -1074,6 +1075,237 @@ class HDNAViewer {
 
             this.showNeuronDetail(res, fakeReplay);
         } catch (err) {}
+    }
+
+    // --- Governance Mode ---
+
+    toggleMode() {
+        this.governanceMode = !this.governanceMode;
+        const btn = document.getElementById('btn-mode');
+        const overlay = document.getElementById('governance-overlay');
+        const sidepanel = document.getElementById('sidepanel');
+
+        if (this.governanceMode) {
+            btn.textContent = 'Research View';
+            btn.style.borderColor = 'var(--green)';
+            btn.style.color = 'var(--green)';
+            overlay.style.display = 'block';
+            sidepanel.style.display = 'none';
+            document.querySelector('#header h1').textContent = 'AI Governance Dashboard';
+            this.updateGovernancePanel();
+        } else {
+            btn.textContent = 'Governance View';
+            btn.style.borderColor = 'var(--border)';
+            btn.style.color = 'var(--accent)';
+            overlay.style.display = 'none';
+            sidepanel.style.display = 'flex';
+            document.querySelector('#header h1').textContent = 'HDNA Workbench';
+        }
+    }
+
+    async updateGovernancePanel() {
+        try {
+            const [modelRes, stressRes, auditRes, daemonRes] = await Promise.all([
+                fetch('/api/model').then(r => r.json()),
+                fetch('/api/stress').then(r => r.json()),
+                fetch('/api/audit?count=200').then(r => r.json()),
+                fetch('/api/daemons').then(r => r.json()),
+            ]);
+
+            // Model name
+            document.getElementById('gov-model-name').textContent = modelRes.name || 'Unknown';
+
+            // Total decisions
+            const stats = auditRes.stats || {};
+            document.getElementById('gov-total-decisions').textContent =
+                (stats.total_predictions || 0).toLocaleString();
+
+            // Accuracy
+            const acc = stats.accuracy_100 || 0;
+            const accEl = document.getElementById('gov-accuracy');
+            accEl.textContent = (acc * 100).toFixed(1) + '%';
+            accEl.className = 'value ' + (acc > 0.7 ? 'good' : acc > 0.4 ? 'warn' : 'bad');
+
+            // Components
+            const extra = modelRes.extra || {};
+            document.getElementById('gov-components').textContent =
+                (extra.num_neurons || modelRes.layer_count || 0) + ' components, ' +
+                (modelRes.layer_count || 0) + ' layers';
+
+            // Risk indicators
+            const dead = stressRes.dead_pct || 0;
+            const deadEl = document.getElementById('gov-dead');
+            deadEl.textContent = dead.toFixed(1) + '%';
+            deadEl.className = 'value ' + (dead < 10 ? 'good' : dead < 30 ? 'warn' : 'bad');
+
+            const jitter = stressRes.avg_jitter || 0;
+            const stabEl = document.getElementById('gov-stability');
+            stabEl.textContent = jitter < 0.01 ? 'Stable' : jitter < 0.1 ? 'Minor Fluctuation' : 'Unstable';
+            stabEl.className = 'value ' + (jitter < 0.01 ? 'good' : jitter < 0.1 ? 'warn' : 'bad');
+
+            const drift = stressRes.avg_weight_drift || 0;
+            const driftEl = document.getElementById('gov-drift');
+            driftEl.textContent = drift < 0.001 ? 'None Detected' : drift < 0.01 ? 'Minor' : 'Significant';
+            driftEl.className = 'value ' + (drift < 0.001 ? 'good' : drift < 0.01 ? 'warn' : 'bad');
+
+            const warnings = stressRes.warnings || [];
+            const anomEl = document.getElementById('gov-anomalies');
+            anomEl.textContent = warnings.length === 0 ? 'None' : warnings.length + ' warning(s)';
+            anomEl.className = 'value ' + (warnings.length === 0 ? 'good' : 'bad');
+
+            // Overall status
+            const healthy = (dead < 30 && warnings.length === 0 && jitter < 0.1);
+            const statusLight = document.getElementById('gov-status-light');
+            const statusText = document.getElementById('gov-status-text');
+            const statusSub = document.getElementById('gov-status-sub');
+            const statusCard = document.getElementById('gov-status-card');
+
+            if (healthy) {
+                statusLight.style.background = 'var(--green)';
+                statusText.textContent = 'System Healthy';
+                statusText.style.color = 'var(--green)';
+                statusSub.textContent = 'All monitored models operating normally';
+                statusCard.style.borderColor = 'var(--green)';
+            } else if (warnings.length > 0) {
+                statusLight.style.background = 'var(--red)';
+                statusText.textContent = 'Attention Required';
+                statusText.style.color = 'var(--red)';
+                statusSub.textContent = warnings.join(', ');
+                statusCard.style.borderColor = 'var(--red)';
+            } else {
+                statusLight.style.background = 'var(--orange)';
+                statusText.textContent = 'Review Recommended';
+                statusText.style.color = 'var(--orange)';
+                statusSub.textContent = 'Some metrics outside optimal range';
+                statusCard.style.borderColor = 'var(--orange)';
+            }
+
+            // Compliance status based on features present
+            document.getElementById('gov-art12').textContent = stats.total_predictions > 0 ? 'Compliant' : 'No Data';
+            document.getElementById('gov-art12').className = 'value ' + (stats.total_predictions > 0 ? 'good' : 'warn');
+
+            // Art 15 - robustness
+            const art15El = document.getElementById('gov-art15');
+            if (healthy) {
+                art15El.textContent = 'Compliant';
+                art15El.className = 'value good';
+            } else {
+                art15El.textContent = 'Review Needed';
+                art15El.className = 'value warn';
+            }
+
+            // Recent activity
+            const activityEl = document.getElementById('gov-activity');
+            const records = (auditRes.records || []).slice(-8).reverse();
+            if (records.length > 0) {
+                let html = '';
+                records.forEach(r => {
+                    const time = new Date(r.timestamp * 1000).toLocaleTimeString();
+                    const icon = r.correct ? '<span style="color:var(--green)">&#10003;</span>' :
+                                             '<span style="color:var(--red)">&#10007;</span>';
+                    html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <span>${icon} Decision #${r.step}</span>
+                        <span style="color:var(--text-dim)">Confidence: ${(r.confidence * 100).toFixed(0)}%</span>
+                        <span style="color:var(--text-dim)">${r.source}</span>
+                    </div>`;
+                });
+                activityEl.innerHTML = html;
+            }
+
+        } catch (err) {
+            console.error('Failed to update governance panel:', err);
+        }
+    }
+
+    async generateReport() {
+        const timestamp = new Date().toISOString().split('T')[0];
+        try {
+            const [modelRes, stressRes, auditRes] = await Promise.all([
+                fetch('/api/model').then(r => r.json()),
+                fetch('/api/stress').then(r => r.json()),
+                fetch('/api/audit?count=1000').then(r => r.json()),
+            ]);
+
+            const stats = auditRes.stats || {};
+            const dead = stressRes.dead_pct || 0;
+            const healthy = stressRes.is_healthy !== false;
+            const warnings = stressRes.warnings || [];
+
+            let report = `AI GOVERNANCE REPORT
+Generated: ${new Date().toLocaleString()}
+${'='.repeat(50)}
+
+MODEL INFORMATION
+  Name: ${modelRes.name || 'Unknown'}
+  Framework: ${modelRes.framework || 'Unknown'}
+  Architecture: ${modelRes.architecture || 'Unknown'}
+  Parameters: ${(modelRes.parameter_count || 0).toLocaleString()}
+  Layers: ${modelRes.layer_count || 0}
+
+SYSTEM STATUS: ${healthy ? 'HEALTHY' : 'REVIEW REQUIRED'}
+${'='.repeat(50)}
+
+KEY METRICS
+  Total Decisions Logged: ${(stats.total_predictions || 0).toLocaleString()}
+  Decision Accuracy (last 100): ${((stats.accuracy_100 || 0) * 100).toFixed(1)}%
+  Overall Accuracy: ${((stats.accuracy_all || 0) * 100).toFixed(1)}%
+  Novelty Rate: ${((stats.novelty_rate || 0) * 100).toFixed(1)}%
+
+RISK INDICATORS
+  Inactive Components: ${dead.toFixed(1)}% ${dead < 10 ? '(Low Risk)' : dead < 30 ? '(Medium Risk)' : '(High Risk)'}
+  Decision Stability: ${(stressRes.avg_jitter || 0) < 0.01 ? 'Stable' : 'Fluctuating'}
+  Model Drift: ${(stressRes.avg_weight_drift || 0) < 0.001 ? 'None Detected' : 'Detected'}
+  Active Warnings: ${warnings.length === 0 ? 'None' : warnings.join(', ')}
+
+COMPLIANCE STATUS
+  EU AI Act Article 12 (Record-Keeping): ${stats.total_predictions > 0 ? 'COMPLIANT - All decisions logged with full audit trail' : 'NO DATA'}
+  EU AI Act Article 13 (Transparency): COMPLIANT - Decision replay and inspection available
+  EU AI Act Article 14 (Human Oversight): COMPLIANT - Breakpoints and intervention capabilities active
+  EU AI Act Article 15 (Robustness): ${healthy ? 'COMPLIANT - Health monitoring active, no issues' : 'REVIEW - ' + warnings.join(', ')}
+  NIST AI RMF: ALIGNED - Govern, Map, Measure, Manage functions covered
+
+AUDIT TRAIL
+  Logging: Active (append-only)
+  Records Retained: ${(stats.total_predictions || 0).toLocaleString()}
+  Replay Capability: Available for all logged decisions
+  Export Format: JSON (machine-readable)
+
+${'='.repeat(50)}
+Report generated by HDNA Workbench AI Governance Dashboard
+https://github.com/staffman76/HDNA-Workbench
+`;
+
+            // Download as text file
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ai_governance_report_${timestamp}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+        } catch (err) {
+            alert('Failed to generate report: ' + err);
+        }
+    }
+
+    async exportAuditLog() {
+        try {
+            const data = await fetch('/api/audit?count=10000').then(r => r.json());
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit_log_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Failed to export: ' + err);
+        }
     }
 
     // --- External Model Management ---

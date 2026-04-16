@@ -433,3 +433,20 @@ body {
     padding: 40px;
     color: var(--text-dim);
 }
+
+/* Governance overlay */
+#governance-overlay .card {
+    margin-bottom: 12px;
+}
+
+#governance-overlay .card-header h3 {
+    font-size: 13px;
+}
+
+#governance-overlay .stat-row {
+    padding: 4px 0;
+}
+
+#governance-overlay h2 {
+    letter-spacing: 0.5px;
+}

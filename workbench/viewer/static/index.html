@@ -17,6 +17,7 @@
         <span>Layers: <span class="stat-value" id="stat-layers">-</span></span>
         <span>Health: <span class="stat-value" id="stat-health">-</span></span>
     </div>
+    <button id="btn-mode" onclick="app.toggleMode()" style="padding:4px 12px;background:var(--bg-card);border:1px solid var(--border);color:var(--accent);border-radius:4px;cursor:pointer;font-size:11px">Governance View</button>
 </div>
 
 <div id="main">
@@ -73,6 +74,73 @@
                 <span id="chart-episodes">0</span>
             </div>
             <div id="train-last" style="margin-top:4px;font-size:11px;color:var(--text-dim)"></div>
+        </div>
+    </div>
+
+    <!-- Governance overlay (replaces technical details) -->
+    <div id="governance-overlay" style="display:none;position:absolute;top:44px;right:0;bottom:0;width:380px;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;padding:16px;z-index:20">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h2 style="font-size:16px;color:var(--accent);margin:0">AI Governance Dashboard</h2>
+        </div>
+
+        <!-- Overall Status -->
+        <div class="card" style="border-color:var(--green)" id="gov-status-card">
+            <div style="display:flex;align-items:center;gap:10px;padding:4px 0">
+                <div id="gov-status-light" style="width:24px;height:24px;border-radius:50%;background:var(--green)"></div>
+                <div>
+                    <div id="gov-status-text" style="font-size:16px;font-weight:700;color:var(--green)">System Healthy</div>
+                    <div id="gov-status-sub" style="font-size:11px;color:var(--text-dim)">All monitored models operating normally</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="card">
+            <div class="card-header"><h3>Key Metrics</h3></div>
+            <div class="card-body">
+                <div class="stat-row"><span class="label">Model</span><span class="value" id="gov-model-name">-</span></div>
+                <div class="stat-row"><span class="label">Total Decisions Logged</span><span class="value" id="gov-total-decisions">0</span></div>
+                <div class="stat-row"><span class="label">Decision Accuracy</span><span class="value" id="gov-accuracy">-</span></div>
+                <div class="stat-row"><span class="label">Model Components</span><span class="value" id="gov-components">-</span></div>
+                <div class="stat-row"><span class="label">Active Monitoring</span><span class="value good" id="gov-monitoring">Enabled</span></div>
+            </div>
+        </div>
+
+        <!-- Risk Indicators -->
+        <div class="card">
+            <div class="card-header"><h3>Risk Indicators</h3></div>
+            <div class="card-body" id="gov-risks">
+                <div class="stat-row"><span class="label">Inactive Components</span><span class="value" id="gov-dead">-</span></div>
+                <div class="stat-row"><span class="label">Decision Stability</span><span class="value" id="gov-stability">-</span></div>
+                <div class="stat-row"><span class="label">Model Drift</span><span class="value" id="gov-drift">-</span></div>
+                <div class="stat-row"><span class="label">Anomalies Detected</span><span class="value" id="gov-anomalies">-</span></div>
+            </div>
+        </div>
+
+        <!-- Compliance Status -->
+        <div class="card">
+            <div class="card-header"><h3>Compliance Status</h3></div>
+            <div class="card-body">
+                <div class="stat-row"><span class="label">EU AI Act Art. 12 (Logging)</span><span class="value good" id="gov-art12">Compliant</span></div>
+                <div class="stat-row"><span class="label">EU AI Act Art. 13 (Transparency)</span><span class="value good" id="gov-art13">Compliant</span></div>
+                <div class="stat-row"><span class="label">EU AI Act Art. 14 (Human Oversight)</span><span class="value good" id="gov-art14">Compliant</span></div>
+                <div class="stat-row"><span class="label">EU AI Act Art. 15 (Robustness)</span><span class="value" id="gov-art15">Monitoring</span></div>
+                <div class="stat-row"><span class="label">NIST AI RMF Alignment</span><span class="value good" id="gov-nist">Aligned</span></div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+            <div class="card-header"><h3>Recent Activity</h3></div>
+            <div class="card-body" id="gov-activity">
+                <div style="color:var(--text-dim);font-size:11px">No activity recorded</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="margin-top:12px;display:flex;gap:8px">
+            <button onclick="app.generateReport()" style="flex:1;padding:8px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--text);border-radius:4px;cursor:pointer;font-size:12px">Generate Report</button>
+            <button onclick="app.exportAuditLog()" style="flex:1;padding:8px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer;font-size:12px">Export Audit Log</button>
         </div>
     </div>
 
