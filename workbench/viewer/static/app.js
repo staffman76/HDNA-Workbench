@@ -2017,14 +2017,30 @@ https://github.com/staffman76/HDNA-Workbench
         const curriculum = document.getElementById('train-curriculum').value;
         this.trainSpeed = parseInt(document.getElementById('train-speed').value);
 
+        // Stop any existing training first
+        if (this.trainInterval) {
+            clearTimeout(this.trainInterval);
+            this.trainInterval = null;
+        }
         try {
-            await fetch('/api/train/start', {
+            await fetch('/api/train/stop', { method: 'POST' });
+        } catch (e) {}
+
+        try {
+            const res = await fetch('/api/train/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ curriculum: curriculum, phases: 5 }),
-            });
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Training failed to start: ' + res.error);
+                return;
+            }
+            console.log('Training started:', res);
         } catch (err) {
             console.error('Failed to start training:', err);
+            alert('Failed to start training: ' + err);
             return;
         }
 
@@ -2033,6 +2049,7 @@ https://github.com/staffman76/HDNA-Workbench
         this.chartData.accuracy = [];
         this.chartData.epsilon = [];
         this.chartData.bestAccuracy = 0;
+        this.graphHistory = null;
         document.getElementById('btn-train').classList.add('active');
         document.getElementById('btn-train').textContent = 'Stop';
         document.getElementById('train-overlay').style.display = 'block';

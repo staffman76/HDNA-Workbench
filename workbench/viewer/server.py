@@ -587,17 +587,20 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         global _trainer
         if _adapter is None:
             return {"error": "No model loaded"}
-        if _trainer is not None and _trainer.running:
-            return {"error": "Training already running"}
+
+        # Always allow starting a new training session
+        # (kills any existing session)
+        _trainer = None
 
         params = json.loads(body) if body else {}
-        curriculum_name = params.get("curriculum", "math")
-        phases = params.get("phases", 3)
+        curriculum_name = params.get("curriculum", "classification")
+        phases = params.get("phases", 5)
 
         try:
             _trainer = LiveTrainer(_adapter, curriculum_name, phases)
             return {"status": "started", "curriculum": curriculum_name, "phases": phases}
         except Exception as e:
+            _trainer = None
             return {"error": str(e)}
 
     def _train_step(self, count=1):
