@@ -1079,14 +1079,10 @@ class LiveTrainer:
                 }
                 self._interventions.append(intervention_info)
 
-            # Adaptive learning rate: boost if accuracy is stuck
-            if self.brain and len(self._recent) >= 50:
+            # Adaptive learning rate (only after warm-up: 200+ episodes)
+            if self.brain and len(self._recent) >= 50 and self.episode > 200:
                 acc = sum(self._recent) / len(self._recent)
-                if acc < 0.25:
-                    # Stuck at random chance — increase exploration and learning rate
-                    self.brain.epsilon = min(0.6, self.brain.epsilon + 0.05)
-                    self.brain.lr = min(0.05, self.brain.lr * 1.2)
-                elif acc > 0.6:
+                if acc > 0.6:
                     # Doing well — tighten exploration
                     self.brain.epsilon = max(0.05, self.brain.epsilon * 0.95)
 
