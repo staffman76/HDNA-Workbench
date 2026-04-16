@@ -186,10 +186,12 @@ class Coordinator:
     Q-values to route between daemons (autonomy).
     """
 
-    def __init__(self, scaffold_decay_rate: float = 0.001):
+    def __init__(self, scaffold_decay_rate: float = 0.001,
+                 scaffold_floor: float = 0.4):
         self.daemons: dict[str, Daemon] = {}
         self.scaffold_strength: float = 1.0  # 1.0 = full scaffold, 0.0 = brain only
         self.scaffold_decay_rate = scaffold_decay_rate
+        self.scaffold_floor = scaffold_floor  # never go below this
         self.decisions_made: int = 0
         self._decision_log: list = []
         self._log_capacity: int = 1000
@@ -273,8 +275,9 @@ class Coordinator:
         if len(self._decision_log) > self._log_capacity:
             self._decision_log.pop(0)
 
-        # Decay scaffold
-        self.scaffold_strength = max(0.0, self.scaffold_strength - self.scaffold_decay_rate)
+        # Decay scaffold (but never below floor — daemons always have influence)
+        self.scaffold_strength = max(self.scaffold_floor,
+                                     self.scaffold_strength - self.scaffold_decay_rate)
 
         return selected
 

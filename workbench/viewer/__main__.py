@@ -108,7 +108,7 @@ else:
     print(f"Built: {len(net.neurons)} neurons")
 
 # Set up daemons — these do the actual reasoning
-coordinator = Coordinator(scaffold_decay_rate=0.002)
+coordinator = Coordinator(scaffold_decay_rate=0.002, scaffold_floor=0.7)
 pattern_daemon = FeaturePatternDaemon("pattern", num_actions=5,
                                       description="Learns feature-action profiles")
 coordinator.register(pattern_daemon)
