@@ -70,7 +70,15 @@ def get_curriculum(name: str, **kwargs) -> Optional[Curriculum]:
     """Build a curriculum by name from the registry."""
     if name not in _REGISTRY:
         return None
-    return _REGISTRY[name]["factory"](**kwargs)
+    factory = _REGISTRY[name]["factory"]
+    # Try with kwargs first, fall back to no-args if factory doesn't accept them
+    try:
+        return factory(**kwargs)
+    except TypeError:
+        try:
+            return factory()
+        except Exception:
+            return None
 
 
 def load_curriculum_file(path: str) -> Curriculum:
