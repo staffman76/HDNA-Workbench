@@ -485,7 +485,12 @@ class HDNAViewer {
             layers[n.layer].push(n);
         });
 
-        let html = '';
+        let html = `<div class="neuron-row" style="border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-weight:600;color:var(--text-dim);cursor:default">
+            <span class="nid">ID</span>
+            <span class="layer-tag">Layer</span>
+            <span class="activation">Activation</span>
+            <span class="status">Status</span>
+        </div>`;
         Object.keys(layers).sort((a, b) => a - b).forEach(layer => {
             const neurons = layers[layer];
             const alive = neurons.filter(n => !n.is_dead).length;
@@ -536,7 +541,13 @@ class HDNAViewer {
             return;
         }
 
-        let html = '';
+        let html = `<div class="audit-row" style="border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-weight:600;color:var(--text-dim);cursor:default">
+            <span class="step">Step</span>
+            <span class="prediction">Class</span>
+            <span class="confidence">Conf</span>
+            <span class="result">Result</span>
+            <span style="font-size:10px">Source</span>
+        </div>`;
         data.records.slice().reverse().forEach((r, i) => {
             html += `<div class="audit-row" onclick="app.seekTrace(${data.records.length - 1 - i})">
                 <span class="step">${r.step}</span>
