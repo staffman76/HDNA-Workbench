@@ -737,6 +737,19 @@ class LiveTrainer:
             self.net = new_net
             self.brain = new_brain
 
+            # Reset daemon profiles (old profiles have wrong dimensions)
+            if self.coordinator:
+                for daemon in self.coordinator.daemons.values():
+                    if hasattr(daemon, 'action_profiles'):
+                        daemon.action_profiles = {}
+                        daemon.action_counts = {}
+                    if hasattr(daemon, 'op_profiles'):
+                        daemon.op_profiles = {}
+                        daemon.op_counts = {}
+                    if hasattr(daemon, 'profiles'):
+                        daemon.profiles = {}
+                        daemon.counts = {}
+
     def _get_curriculum_feature_dim(self):
         """Get feature dimension from the first task in the curriculum."""
         for level in self.curriculum.levels:
