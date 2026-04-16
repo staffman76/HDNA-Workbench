@@ -523,117 +523,7 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         else:
             raise ValueError(f"Unknown template: {template}")
 
-
-def _make_pattern_daemon(name, num_actions):
-    """Create a pattern matching daemon (same as __main__.py version)."""
-    from ..core.daemon import Daemon, Proposal
-
-    class PD(Daemon):
-        def __init__(self):
-            super().__init__(name=name, domain="pattern",
-                             description="Learns feature-action profiles")
-            self.num_actions = num_actions
-            self.action_profiles = {}
-            self.action_counts = {}
-        def reason(self, state, features, rng=None):
-            if features is None or len(features) == 0: return None
-            if not self.action_profiles:
-                return Proposal(action=int(np.argmax(np.abs(features))) % self.num_actions,
-                               confidence=0.3, reasoning="no history",
-                               source=self.name)
-            best_action, best_sim = 0, -1
-            for action, profile in self.action_profiles.items():
-                nf = np.linalg.norm(features)
-                np_ = np.linalg.norm(profile)
-                sim = float(np.dot(features, profile) / (nf * np_ + 1e-8)) if nf > 0 and np_ > 0 else 0
-                if sim > best_sim: best_sim, best_action = sim, action
-            return Proposal(action=best_action,
-                           confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
-                           reasoning=f"profile match (sim={best_sim:.3f})",
-                           source=self.name)
-        def learn_from_outcome(self, features, action, correct):
-            if not correct: return
-            if action not in self.action_profiles:
-                self.action_profiles[action] = features.copy()
-                self.action_counts[action] = 1
-            else:
-                c = self.action_counts[action]
-                self.action_profiles[action] = (self.action_profiles[action] * c + features) / (c + 1)
-                self.action_counts[action] = c + 1
-    return PD()
-
-
-def _make_math_daemon(name, num_actions):
-    """Create a math specialist daemon."""
-    from ..core.daemon import Daemon, Proposal
-
-    class MD(Daemon):
-        def __init__(self):
-            super().__init__(name=name, domain="math",
-                             description="Per-operator math profiles")
-            self.num_actions = num_actions
-            self.op_profiles = {}
-            self.op_counts = {}
-        def _get_op_key(self, features):
-            ops = features[5:12] if len(features) > 11 else np.zeros(7)
-            return int(np.argmax(ops)) if np.max(ops) > 0.5 else -1
-        def reason(self, state, features, rng=None):
-            if features is None: return None
-            op = self._get_op_key(features)
-            best_action, best_sim = 0, -1
-            for action in range(self.num_actions):
-                key = (op, action)
-                if key in self.op_profiles:
-                    profile = self.op_profiles[key]
-                    nf = np.linalg.norm(features)
-                    np_ = np.linalg.norm(profile)
-                    sim = float(np.dot(features, profile) / (nf * np_ + 1e-8))
-                    if sim > best_sim: best_sim, best_action = sim, action
-            if best_sim < 0: return None
-            return Proposal(action=best_action,
-                           confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
-                           reasoning=f"op={op} (sim={best_sim:.3f})",
-                           source=self.name)
-        def learn_from_outcome(self, features, action, correct):
-            if not correct: return
-            op = self._get_op_key(features)
-            key = (op, action)
-            if key not in self.op_profiles:
-                self.op_profiles[key] = features.copy()
-                self.op_counts[key] = 1
-            else:
-                c = self.op_counts[key]
-                self.op_profiles[key] = (self.op_profiles[key] * c + features) / (c + 1)
-                self.op_counts[key] = c + 1
-    return MD()
-
-
-def _make_feature_group_daemon(name, num_actions):
-    """Create a feature group daemon."""
-    from ..core.daemon import Daemon, Proposal
-
-    class FGD(Daemon):
-        def __init__(self):
-            super().__init__(name=name, domain="feature_group",
-                             description="Feature group heuristic")
-            self.num_actions = num_actions
-        def reason(self, state, features, rng=None):
-            if features is None or len(features) == 0: return None
-            group_size = max(1, len(features) // self.num_actions)
-            scores = []
-            for i in range(self.num_actions):
-                start = i * group_size
-                end = min(start + group_size, len(features))
-                scores.append(float(np.sum(np.abs(features[start:end]))))
-            action = int(np.argmax(scores))
-            total = sum(scores) + 1e-8
-            return Proposal(action=action,
-                           confidence=scores[action] / total,
-                           reasoning=f"group {action} ({scores[action]:.2f})",
-                           source=self.name)
-    return FGD()
-
-
+    # --- Curriculum Management ---
 
     def _list_curricula(self):
         from ..curricula.registry import list_curricula
@@ -1271,6 +1161,98 @@ def _serialize(obj):
     if isinstance(obj, set):
         return list(obj)
     return str(obj)
+
+
+def _make_pattern_daemon(name, num_actions):
+    from ..core.daemon import Daemon, Proposal
+    class PD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="pattern", description="Learns feature-action profiles")
+            self.num_actions = num_actions
+            self.action_profiles = {}
+            self.action_counts = {}
+        def reason(self, state, features, rng=None):
+            if features is None or len(features) == 0: return None
+            if not self.action_profiles:
+                return Proposal(action=int(np.argmax(np.abs(features))) % self.num_actions,
+                               confidence=0.3, reasoning="no history", source=self.name)
+            best_action, best_sim = 0, -1
+            for action, profile in self.action_profiles.items():
+                nf, np_ = np.linalg.norm(features), np.linalg.norm(profile)
+                sim = float(np.dot(features, profile) / (nf * np_ + 1e-8)) if nf > 0 and np_ > 0 else 0
+                if sim > best_sim: best_sim, best_action = sim, action
+            return Proposal(action=best_action, confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
+                           reasoning=f"profile match (sim={best_sim:.3f})", source=self.name)
+        def learn_from_outcome(self, features, action, correct):
+            if not correct: return
+            if action not in self.action_profiles:
+                self.action_profiles[action] = features.copy()
+                self.action_counts[action] = 1
+            else:
+                c = self.action_counts[action]
+                self.action_profiles[action] = (self.action_profiles[action] * c + features) / (c + 1)
+                self.action_counts[action] = c + 1
+    return PD()
+
+
+def _make_math_daemon(name, num_actions):
+    from ..core.daemon import Daemon, Proposal
+    class MD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="math", description="Per-operator math profiles")
+            self.num_actions = num_actions
+            self.op_profiles = {}
+            self.op_counts = {}
+        def _get_op_key(self, features):
+            ops = features[5:12] if len(features) > 11 else np.zeros(7)
+            return int(np.argmax(ops)) if np.max(ops) > 0.5 else -1
+        def reason(self, state, features, rng=None):
+            if features is None: return None
+            op = self._get_op_key(features)
+            best_action, best_sim = 0, -1
+            for action in range(self.num_actions):
+                key = (op, action)
+                if key in self.op_profiles:
+                    profile = self.op_profiles[key]
+                    nf, np_ = np.linalg.norm(features), np.linalg.norm(profile)
+                    sim = float(np.dot(features, profile) / (nf * np_ + 1e-8))
+                    if sim > best_sim: best_sim, best_action = sim, action
+            if best_sim < 0: return None
+            return Proposal(action=best_action, confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
+                           reasoning=f"op={op} (sim={best_sim:.3f})", source=self.name)
+        def learn_from_outcome(self, features, action, correct):
+            if not correct: return
+            op = self._get_op_key(features)
+            key = (op, action)
+            if key not in self.op_profiles:
+                self.op_profiles[key] = features.copy()
+                self.op_counts[key] = 1
+            else:
+                c = self.op_counts[key]
+                self.op_profiles[key] = (self.op_profiles[key] * c + features) / (c + 1)
+                self.op_counts[key] = c + 1
+    return MD()
+
+
+def _make_feature_group_daemon(name, num_actions):
+    from ..core.daemon import Daemon, Proposal
+    class FGD(Daemon):
+        def __init__(self):
+            super().__init__(name=name, domain="feature_group", description="Feature group heuristic")
+            self.num_actions = num_actions
+        def reason(self, state, features, rng=None):
+            if features is None or len(features) == 0: return None
+            group_size = max(1, len(features) // self.num_actions)
+            scores = []
+            for i in range(self.num_actions):
+                start = i * group_size
+                end = min(start + group_size, len(features))
+                scores.append(float(np.sum(np.abs(features[start:end]))))
+            action = int(np.argmax(scores))
+            total = sum(scores) + 1e-8
+            return Proposal(action=action, confidence=scores[action] / total,
+                           reasoning=f"group {action} ({scores[action]:.2f})", source=self.name)
+    return FGD()
 
 
 def launch(adapter, port=8420, open_browser=True):
