@@ -854,6 +854,9 @@ class LiveTrainer:
         return result_dict
 
     def stats(self):
+        # Include per-level snapshots for the graph panel
+        curriculum_data = self.curriculum.progress
+        curriculum_data["levels"] = [l.snapshot() for l in self.curriculum.levels]
         return {
             "episode": self.episode,
             "correct": self.correct,
@@ -861,7 +864,7 @@ class LiveTrainer:
             "accuracy_50": round(sum(self._recent) / max(1, len(self._recent)), 4),
             "total_reward": round(self.total_reward, 4),
             "running": self.running,
-            "curriculum": self.curriculum.progress,
+            "curriculum": curriculum_data,
         }
 
 

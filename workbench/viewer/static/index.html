@@ -21,6 +21,8 @@
 </div>
 
 <div id="main">
+    <!-- Left column: viewport + graphs -->
+    <div id="left-column">
     <!-- 3D Viewport -->
     <div id="viewport">
         <canvas id="canvas3d"></canvas>
@@ -142,6 +144,75 @@
         </div>
     </div>
 
+    <!-- Graphs Panel (bottom of left column) -->
+    <div id="graphs-panel">
+        <div class="tab-bar" style="background:var(--bg-panel)">
+            <button class="active" onclick="app.switchGraphTab('overview')">Overview</button>
+            <button onclick="app.switchGraphTab('network')">Network Health</button>
+            <button onclick="app.switchGraphTab('daemons_graph')">Daemon Performance</button>
+            <button onclick="app.switchGraphTab('curriculum_progress')">Curriculum</button>
+        </div>
+        <div id="graphs-content" style="padding:8px;display:flex;gap:8px;overflow-x:auto">
+            <!-- Overview graphs -->
+            <div class="graph-pane active" id="graph-overview">
+                <div style="display:flex;gap:8px;height:100%">
+                    <div class="graph-card">
+                        <div class="graph-title">Accuracy <span id="graph-acc-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-accuracy" width="200" height="100"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Network Activity <span id="graph-activity-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-activity" width="200" height="100"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Decision Confidence <span id="graph-conf-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-confidence" width="200" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Network health graphs -->
+            <div class="graph-pane" id="graph-network" style="display:none">
+                <div style="display:flex;gap:8px;height:100%">
+                    <div class="graph-card">
+                        <div class="graph-title">Dead Neurons % <span id="graph-dead-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-dead" width="200" height="100"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Weight Drift <span id="graph-drift-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-drift" width="200" height="100"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Activation Spread <span id="graph-spread-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-spread" width="200" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Daemon performance -->
+            <div class="graph-pane" id="graph-daemons_graph" style="display:none">
+                <div style="display:flex;gap:8px;height:100%">
+                    <div class="graph-card" style="flex:2">
+                        <div class="graph-title">Daemon Selection Rate</div>
+                        <canvas id="graph-daemon-rate" width="300" height="100"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Scaffold Strength <span id="graph-scaffold-insight" class="graph-insight"></span></div>
+                        <canvas id="graph-scaffold" width="200" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Curriculum progress -->
+            <div class="graph-pane" id="graph-curriculum_progress" style="display:none">
+                <div style="display:flex;gap:8px;height:100%">
+                    <div class="graph-card" style="flex:3">
+                        <div class="graph-title">Level Mastery</div>
+                        <div id="curriculum-bars" style="display:flex;gap:3px;align-items:flex-end;height:80px;padding-top:4px"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div> <!-- end left-column -->
+
     <!-- Neuron detail popup -->
     <div id="neuron-detail">
         <span class="close-btn" onclick="app.closeNeuronDetail()">&times;</span>
@@ -156,6 +227,7 @@
             <button onclick="app.switchTab('audit')">Audit</button>
             <button onclick="app.switchTab('health')">Health</button>
             <button onclick="app.switchTab('daemons')">Daemons</button>
+            <button onclick="app.switchTab('build')">Build</button>
             <button onclick="app.switchTab('models')">Models</button>
         </div>
         <div class="tab-content">
@@ -177,6 +249,100 @@
             <div class="tab-pane" id="tab-daemons">
                 <div id="daemon-content"><div class="loading">Loading...</div></div>
             </div>
+            <!-- Build tab -->
+            <div class="tab-pane" id="tab-build">
+                <!-- Network Architecture -->
+                <div class="card">
+                    <div class="card-header"><h3>Network Architecture</h3></div>
+                    <div class="card-body">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Define layers. 3D view updates when you rebuild.</div>
+                        <div style="display:flex;gap:4px;margin-bottom:4px">
+                            <div style="flex:1">
+                                <div style="font-size:10px;color:var(--text-dim)">Input</div>
+                                <input id="build-input" type="number" value="25" style="width:100%;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px">
+                            </div>
+                            <div style="flex:1">
+                                <div style="font-size:10px;color:var(--text-dim)">Output</div>
+                                <input id="build-output" type="number" value="5" style="width:100%;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px">
+                            </div>
+                        </div>
+                        <div style="font-size:10px;color:var(--text-dim)">Hidden Layers</div>
+                        <div id="build-layers">
+                            <div class="build-layer-row"><input type="number" value="48" class="build-layer-input"><span style="font-size:10px;color:var(--text-dim)">neurons</span></div>
+                            <div class="build-layer-row"><input type="number" value="24" class="build-layer-input"><span style="font-size:10px;color:var(--text-dim)">neurons</span></div>
+                            <div class="build-layer-row"><input type="number" value="12" class="build-layer-input"><span style="font-size:10px;color:var(--text-dim)">neurons</span></div>
+                        </div>
+                        <div style="display:flex;gap:4px;margin-top:4px">
+                            <button onclick="app.addBuildLayer()" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--green);border-radius:3px;cursor:pointer;font-size:11px">+ Layer</button>
+                            <button onclick="app.removeBuildLayer()" style="flex:1;padding:4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--red);border-radius:3px;cursor:pointer;font-size:11px">- Layer</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daemons -->
+                <div class="card">
+                    <div class="card-header"><h3>Daemons</h3></div>
+                    <div class="card-body">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Reasoning modules. Pattern daemon learns from examples. Math daemon uses operator profiles.</div>
+                        <div id="build-daemons">
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
+                                <input type="checkbox" id="build-d-pattern" checked> Pattern Matching
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
+                                <input type="checkbox" id="build-d-math" checked> Math Specialist
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
+                                <input type="checkbox" id="build-d-feature"> Feature Group
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Training Plan -->
+                <div class="card">
+                    <div class="card-header"><h3>Training Plan</h3></div>
+                    <div class="card-body">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Recommended: start with Classification to warm up daemons, then switch to target domain.</div>
+                        <div id="build-plan">
+                            <div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;font-size:11px">
+                                <span style="color:var(--green);width:16px">1.</span>
+                                <span>Classification (warm-up)</span>
+                                <span style="color:var(--text-dim);margin-left:auto">200 ep</span>
+                            </div>
+                            <div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;font-size:11px">
+                                <span style="color:var(--accent);width:16px">2.</span>
+                                <span>Target curriculum</span>
+                                <span style="color:var(--text-dim);margin-left:auto">500+ ep</span>
+                            </div>
+                        </div>
+                        <div style="font-size:10px;color:var(--text-dim);margin-top:4px">
+                            Tip: The pattern daemon needs ~50 examples per class before it becomes accurate. Larger networks need more training but can learn harder patterns.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Learning Rate -->
+                <div class="card">
+                    <div class="card-header"><h3>Parameters</h3></div>
+                    <div class="card-body">
+                        <div class="stat-row">
+                            <span class="label">Learning Rate</span>
+                            <input id="build-lr" type="number" value="0.01" step="0.001" min="0.001" max="0.1" style="width:70px;padding:2px 4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;text-align:right">
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Exploration (epsilon)</span>
+                            <input id="build-eps" type="number" value="0.3" step="0.05" min="0.05" max="1.0" style="width:70px;padding:2px 4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;text-align:right">
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Scaffold Floor</span>
+                            <input id="build-scaffold" type="number" value="0.7" step="0.1" min="0.0" max="1.0" style="width:70px;padding:2px 4px;background:var(--bg-dark);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:12px;text-align:right">
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="app.buildAndDeploy()" style="width:100%;padding:10px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--text);border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;margin-top:4px">Build & Deploy Model</button>
+            </div>
+
             <!-- Models tab -->
             <div class="tab-pane" id="tab-models">
                 <div class="card">
