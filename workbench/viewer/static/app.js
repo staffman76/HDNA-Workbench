@@ -2270,7 +2270,10 @@ https://github.com/staffman76/HDNA-Workbench
             accEl.style.color = acc50 > 0.5 ? 'var(--green)' : acc50 > 0.25 ? 'var(--orange)' : 'var(--red)';
 
             document.getElementById('train-eps').textContent = lastStep.epsilon || 0;
-            document.getElementById('train-level').textContent = lastStep.level || '-';
+            // Show curriculum's current progression level, not just last task's level
+            const curProgress = stats.curriculum || {};
+            document.getElementById('train-level').textContent =
+                curProgress.current_level || lastStep.level || '-';
 
             // Show last few results
             const lastN = data.steps.slice(-5).reverse();
