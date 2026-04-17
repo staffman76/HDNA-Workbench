@@ -734,25 +734,55 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
         steps = params.get("steps", 5)
         losses = []
+        correct_count = 0
+        total_count = 0
 
         _transformer.train()
+        vocab = _transformer.vocab_size
         for _ in range(steps):
-            # Simple next-token prediction training
-            # Generate random sequences and train to predict next token
+            # Learnable task: repeating patterns and simple sequences
+            # Pattern types:
+            #   1. Repeat: A B C A B C A B -> predict C
+            #   2. Increment: 10 11 12 13 -> predict 14
+            #   3. Copy: tokens repeat after a separator (token 0)
+            batch_size = 4
             seq_len = 16
-            input_ids = torch.randint(0, _transformer.vocab_size, (4, seq_len))
-            target_ids = torch.randint(0, _transformer.vocab_size, (4, seq_len))
+            input_ids = torch.zeros(batch_size, seq_len, dtype=torch.long)
+            target_ids = torch.zeros(batch_size, seq_len, dtype=torch.long)
 
-            # For a more interesting task: predict shifted input (autoregressive)
-            full_seq = torch.randint(0, _transformer.vocab_size, (4, seq_len + 1))
-            input_ids = full_seq[:, :-1]
-            target_ids = full_seq[:, 1:]
+            for b in range(batch_size):
+                pattern_type = torch.randint(0, 3, (1,)).item()
+
+                if pattern_type == 0:
+                    # Repeat pattern: ABC ABC ABC...
+                    pat_len = torch.randint(2, 5, (1,)).item()
+                    pattern = torch.randint(1, min(50, vocab), (pat_len,))
+                    seq = pattern.repeat(seq_len // pat_len + 1)[:seq_len + 1]
+                elif pattern_type == 1:
+                    # Increment: start, start+1, start+2, ...
+                    start = torch.randint(1, min(vocab - seq_len - 2, 100), (1,)).item()
+                    seq = torch.arange(start, start + seq_len + 1)
+                else:
+                    # Copy after separator: A B C 0 A B C 0 A...
+                    pat_len = torch.randint(2, 5, (1,)).item()
+                    pattern = torch.randint(1, min(50, vocab), (pat_len,))
+                    chunk = torch.cat([pattern, torch.tensor([0])])
+                    seq = chunk.repeat(seq_len // (pat_len + 1) + 1)[:seq_len + 1]
+
+                input_ids[b] = seq[:seq_len]
+                target_ids[b] = seq[1:seq_len + 1]
 
             logits, trace = _transformer(input_ids)
             loss = torch.nn.functional.cross_entropy(
-                logits.reshape(-1, _transformer.vocab_size),
+                logits.reshape(-1, vocab),
                 target_ids.reshape(-1)
             )
+
+            # Track accuracy (did it predict the right next token?)
+            with torch.no_grad():
+                preds = logits.argmax(dim=-1)
+                correct_count += int((preds == target_ids).sum())
+                total_count += target_ids.numel()
 
             _transformer_optimizer.zero_grad()
             loss.backward()
@@ -770,10 +800,13 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         head_report = _transformer.head_report()
         trace_summary = _transformer.trace_summary()
 
+        accuracy = correct_count / max(1, total_count)
+
         return {
             "steps": steps,
             "losses": [round(l, 4) for l in losses],
             "avg_loss": round(sum(losses) / len(losses), 4),
+            "accuracy": round(accuracy, 4),
             "total_forwards": _transformer.total_forwards,
             "head_report": head_report,
             "trace_summary": trace_summary,

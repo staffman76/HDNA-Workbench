@@ -1328,16 +1328,26 @@ class HDNAViewer {
             await this.showTransformerView();
 
             // Update training stats display
+            const acc = res.accuracy || 0;
             document.getElementById('train-ep').textContent = res.total_forwards;
-            document.getElementById('train-acc').textContent = `loss: ${res.avg_loss.toFixed(3)}`;
+            document.getElementById('train-acc').textContent = `${(acc * 100).toFixed(1)}%`;
             document.getElementById('train-acc').style.color =
-                res.avg_loss < 5 ? 'var(--green)' : res.avg_loss < 6 ? 'var(--orange)' : 'var(--red)';
+                acc > 0.7 ? 'var(--green)' : acc > 0.3 ? 'var(--orange)' : 'var(--red)';
             document.getElementById('train-overlay').style.display = 'block';
             document.getElementById('train-lifetime').textContent =
-                `${res.total_forwards} fwd passes`;
+                `loss: ${res.avg_loss.toFixed(3)}`;
+            document.getElementById('train-eps').textContent =
+                res.avg_loss.toFixed(2);
+
+            // Track best
+            if (acc > this.chartData.bestAccuracy) {
+                this.chartData.bestAccuracy = acc;
+            }
+            document.getElementById('train-best').textContent =
+                (this.chartData.bestAccuracy * 100).toFixed(1) + '%';
 
             // Show head specialization
-            const specialized = (res.head_report || []).filter(h => h.tag !== 'balanced' && h.tag !== 'head_' + h.head);
+            const specialized = (res.head_report || []).filter(h => h.tag !== 'balanced' && !h.tag.startsWith('head_'));
             document.getElementById('train-level').textContent =
                 `${specialized.length}/${(res.head_report || []).length} heads specialized`;
 
