@@ -2210,7 +2210,7 @@ https://github.com/staffman76/HDNA-Workbench
                 alert('Training failed to start: ' + res.error);
                 return;
             }
-            console.log('Training started:', res);
+            console.log('Training started:', JSON.stringify(res, null, 2));
         } catch (err) {
             console.error('Failed to start training:', err);
             alert('Failed to start training: ' + err);

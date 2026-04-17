@@ -30,7 +30,7 @@ if save_path.exists():
 else:
     print("No saved model found. Building fresh demo model...")
     rng = np.random.default_rng(42)
-    net = HDNANetwork(input_dim=25, output_dim=5, hidden_dims=[48, 24, 12], rng=rng)
+    net = HDNANetwork(input_dim=64, output_dim=10, hidden_dims=[48, 24, 12], rng=rng)
     brain = Brain(net, epsilon=0.3, learning_rate=0.01)
     print(f"Built: {len(net.neurons)} neurons, {sum(len(n.routing) for n in net.neurons.values())} connections")
 

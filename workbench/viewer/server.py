@@ -782,7 +782,6 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             return {"error": "No model loaded"}
 
         # Always allow starting a new training session
-        # (kills any existing session)
         _trainer = None
 
         params = json.loads(body) if body else {}
@@ -791,7 +790,28 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
         try:
             _trainer = LiveTrainer(_adapter, curriculum_name, phases)
-            return {"status": "started", "curriculum": curriculum_name, "phases": phases}
+
+            # Diagnostic info
+            net = _trainer.net
+            daemons_info = []
+            for dname, d in _trainer.coordinator.daemons.items():
+                daemons_info.append({
+                    "name": dname,
+                    "type": type(d).__name__,
+                    "knn": hasattr(d, 'per_class'),
+                })
+
+            return {
+                "status": "started",
+                "curriculum": curriculum_name,
+                "phases": phases,
+                "network": {
+                    "input_dim": net.input_dim,
+                    "output_dim": net.output_dim,
+                    "neurons": len(net.neurons),
+                },
+                "daemons": daemons_info,
+            }
         except Exception as e:
             _trainer = None
             return {"error": str(e)}
@@ -889,10 +909,11 @@ class LiveTrainer:
             from ..curricula import classification_curriculum
             self.curriculum = classification_curriculum()
 
-        # Check if network input dim matches curriculum feature dim
-        # If not, rebuild the network to match
+        # Check if network is too SMALL for this curriculum's features
+        # Only rebuild if curriculum features are LARGER than network input
+        # Smaller features are handled by padding in step()
         sample_feat_dim = self._get_curriculum_feature_dim()
-        if sample_feat_dim and sample_feat_dim != self.net.input_dim:
+        if sample_feat_dim and sample_feat_dim > self.net.input_dim:
             from ..core.neuron import HDNANetwork
             from ..core.brain import Brain
 
@@ -904,11 +925,7 @@ class LiveTrainer:
                 max(4, sample_feat_dim // 2),
             ]
 
-            output_dim = self.net.output_dim
-            # Check if output dim needs updating too
-            sample_output = self._get_curriculum_output_dim()
-            if sample_output and sample_output != output_dim:
-                output_dim = sample_output
+            output_dim = max(self.net.output_dim, self._get_curriculum_output_dim() or 0)
 
             new_net = HDNANetwork(input_dim=sample_feat_dim,
                                   output_dim=output_dim,
