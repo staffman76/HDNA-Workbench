@@ -1373,6 +1373,9 @@ class HDNAViewer {
             }
             this.drawChart();
 
+            // Update bottom graphs with transformer data
+            this.updateTransformerGraphs(res);
+
         } catch (err) {
             console.error('Transformer train failed:', err);
         }
@@ -1389,6 +1392,10 @@ class HDNAViewer {
         const btn = document.getElementById('btn-transformer');
         btn.textContent = 'Transformer';
         btn.classList.remove('active');
+        document.getElementById('train-overlay').style.display = 'none';
+
+        // Switch back to HDNA view
+        this.switchToModel('HDNA (primary)');
     }
 
     // --- Graph Panel ---
@@ -1455,6 +1462,84 @@ class HDNAViewer {
 
         // Curriculum progress bars
         this.updateCurriculumBars(stats);
+    }
+
+    updateTransformerGraphs(res) {
+        // Bottom graphs for transformer training
+        if (!this.graphHistory) {
+            this.graphHistory = {
+                accuracy: [], dead_pct: [], drift: [], confidence: [],
+                active_pct: [], scaffold: [], maxPoints: 150,
+            };
+        }
+        const gh = this.graphHistory;
+        const headReport = res.head_report || [];
+
+        // Accuracy
+        gh.accuracy.push(res.accuracy || 0);
+
+        // Dead heads as "dead_pct"
+        const totalHeads = headReport.length;
+        const deadHeads = headReport.filter(h => h.is_dead).length;
+        gh.dead_pct.push(totalHeads > 0 ? deadHeads / totalHeads : 0);
+
+        // Specialized heads as "active_pct" (heads that have earned a real tag)
+        const specialized = headReport.filter(h => h.tag !== 'balanced' && !h.tag.startsWith('head_')).length;
+        gh.active_pct.push(totalHeads > 0 ? specialized / totalHeads : 0);
+
+        // Loss as "confidence" (inverted and normalized so lower loss = higher)
+        const lossNorm = Math.max(0, 1 - (res.avg_loss || 7) / 7);
+        gh.confidence.push(lossNorm);
+
+        // Entropy variance as "scaffold" (head differentiation)
+        const entropies = headReport.map(h => h.avg_entropy);
+        const mean = entropies.length > 0 ? entropies.reduce((a,b) => a+b, 0) / entropies.length : 0;
+        const variance = entropies.length > 1 ? entropies.reduce((s,e) => s + (e-mean)**2, 0) / entropies.length : 0;
+        gh.scaffold.push(Math.min(1, variance * 5));  // scale for visibility
+
+        // Trim
+        Object.keys(gh).forEach(k => {
+            if (Array.isArray(gh[k]) && gh[k].length > gh.maxPoints) gh[k].shift();
+        });
+
+        // Draw graphs
+        this.drawMiniGraph('graph-accuracy', gh.accuracy, 'var(--green)', 0, 1);
+        this.drawMiniGraph('graph-activity', gh.active_pct, 'var(--accent)', 0, 1);
+        this.drawMiniGraph('graph-confidence', gh.confidence, 'var(--purple)', 0, 1);
+        this.drawMiniGraph('graph-dead', gh.dead_pct, 'var(--red)', 0, 0.5);
+        this.drawMiniGraph('graph-scaffold', gh.scaffold, 'var(--orange)', 0, 1);
+        this.drawMiniGraph('graph-spread', gh.active_pct, 'var(--accent)', 0, 1);
+
+        // Update insights for transformer context
+        const accInsight = document.getElementById('graph-acc-insight');
+        if (accInsight) {
+            const a = res.accuracy || 0;
+            if (a > 0.7) { accInsight.textContent = 'Patterns learned'; accInsight.className = 'graph-insight good'; }
+            else if (a > 0.3) { accInsight.textContent = 'Learning'; accInsight.className = 'graph-insight warn'; }
+            else { accInsight.textContent = 'Early training'; accInsight.className = 'graph-insight neutral'; }
+        }
+        const actInsight = document.getElementById('graph-activity-insight');
+        if (actInsight) {
+            if (specialized > totalHeads * 0.5) { actInsight.textContent = 'Heads specializing'; actInsight.className = 'graph-insight good'; }
+            else if (specialized > 0) { actInsight.textContent = 'Some specialization'; actInsight.className = 'graph-insight warn'; }
+            else { actInsight.textContent = 'Heads uniform'; actInsight.className = 'graph-insight neutral'; }
+        }
+        const deadInsight = document.getElementById('graph-dead-insight');
+        if (deadInsight) {
+            if (deadHeads === 0) { deadInsight.textContent = 'All heads active'; deadInsight.className = 'graph-insight good'; }
+            else { deadInsight.textContent = `${deadHeads} dead`; deadInsight.className = 'graph-insight bad'; }
+        }
+        const confInsight = document.getElementById('graph-conf-insight');
+        if (confInsight) {
+            if (lossNorm > 0.5) { confInsight.textContent = 'Loss decreasing'; confInsight.className = 'graph-insight good'; }
+            else if (lossNorm > 0.2) { confInsight.textContent = 'Converging'; confInsight.className = 'graph-insight warn'; }
+            else { confInsight.textContent = 'High loss'; confInsight.className = 'graph-insight neutral'; }
+        }
+        const scaffInsight = document.getElementById('graph-scaffold-insight');
+        if (scaffInsight) {
+            if (variance > 0.1) { scaffInsight.textContent = 'Heads differentiating'; scaffInsight.className = 'graph-insight good'; }
+            else { scaffInsight.textContent = 'Heads similar'; scaffInsight.className = 'graph-insight neutral'; }
+        }
     }
 
     drawMiniGraph(canvasId, data, color, min, max) {
