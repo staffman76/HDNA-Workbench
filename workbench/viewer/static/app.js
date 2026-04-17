@@ -2175,7 +2175,13 @@ class HDNAViewer {
                 activityEl.innerHTML = actHtml;
 
             } else {
-                // --- HDNA Governance (original) ---
+                // --- HDNA Governance ---
+                // Fetch real governance metrics
+                const govRes = await fetch('/api/governance').then(r => r.json());
+                const util = govRes.utilization || {};
+                const stab = govRes.stability || {};
+                const drift = govRes.drift || {};
+
                 document.getElementById('gov-model-name').textContent = modelRes.name || 'Unknown';
                 document.getElementById('gov-total-decisions').textContent =
                     (stats.total_predictions || 0).toLocaleString();
@@ -2187,32 +2193,40 @@ class HDNAViewer {
 
                 const extra = modelRes.extra || {};
                 document.getElementById('gov-components').textContent =
-                    (extra.num_neurons || modelRes.layer_count || 0) + ' components, ' +
-                    (modelRes.layer_count || 0) + ' layers';
+                    `${util.active || 0} active, ${util.inactive || 0} available capacity (${util.total || 0} total)`;
 
-                const dead = stressRes.dead_pct || 0;
+                // Component Utilization (not "inactive = bad", but "available capacity")
                 const deadEl = document.getElementById('gov-dead');
-                deadEl.textContent = dead.toFixed(1) + '%';
-                deadEl.className = 'value ' + (dead < 10 ? 'good' : dead < 30 ? 'warn' : 'bad');
+                deadEl.textContent = `${util.utilization_pct || 0}% utilized, ${util.available_capacity_pct || 0}% available`;
+                deadEl.className = 'value ' + (util.utilization_pct > 30 ? 'good' : 'warn');
 
-                const jitter = stressRes.avg_jitter || 0;
+                // Decision Stability (real metric from daemon cluster tightness)
                 const stabEl = document.getElementById('gov-stability');
-                stabEl.textContent = jitter < 0.01 ? 'Stable' : jitter < 0.1 ? 'Minor Fluctuation' : 'Unstable';
-                stabEl.className = 'value ' + (jitter < 0.01 ? 'good' : jitter < 0.1 ? 'warn' : 'bad');
+                stabEl.textContent = `${stab.detail || 'Unknown'} (${stab.score || 0}%)`;
+                stabEl.className = 'value ' + (stab.score > 70 ? 'good' : stab.score > 40 ? 'warn' : 'neutral');
 
-                const drift = stressRes.avg_weight_drift || 0;
+                // Model Drift (real metric from centroid movement)
                 const driftEl = document.getElementById('gov-drift');
-                driftEl.textContent = drift < 0.001 ? 'None Detected' : drift < 0.01 ? 'Minor' : 'Significant';
-                driftEl.className = 'value ' + (drift < 0.001 ? 'good' : drift < 0.01 ? 'warn' : 'bad');
+                driftEl.textContent = drift.detail || 'Unknown';
+                driftEl.className = 'value ' + (
+                    drift.detail && drift.detail.includes('Stable') ? 'good' :
+                    drift.detail && drift.detail.includes('Minimal') ? 'good' :
+                    drift.detail && drift.detail.includes('Moderate') ? 'warn' : 'neutral'
+                );
 
-                const warnings = stressRes.warnings || [];
+                // Anomalies
+                const anomalies = [];
+                if (util.utilization_pct < 10) anomalies.push('Very low utilization');
+                if (stab.score < 20 && stab.score > 0) anomalies.push('Unstable decisions');
+                if (drift.score > 0.2) anomalies.push('Significant drift');
                 const anomEl = document.getElementById('gov-anomalies');
-                anomEl.textContent = warnings.length === 0 ? 'None' : warnings.length + ' warning(s)';
-                anomEl.className = 'value ' + (warnings.length === 0 ? 'good' : 'bad');
+                anomEl.textContent = anomalies.length === 0 ? 'None' : anomalies.join(', ');
+                anomEl.className = 'value ' + (anomalies.length === 0 ? 'good' : 'warn');
 
-                const healthy = (dead < 30 && warnings.length === 0 && jitter < 0.1);
-                this._setGovStatus(healthy, warnings);
+                const healthy = anomalies.length === 0 && stab.score > 40;
+                this._setGovStatus(healthy, anomalies);
 
+                // Compliance
                 document.getElementById('gov-art12').textContent = stats.total_predictions > 0 ? 'Compliant' : 'No Data';
                 document.getElementById('gov-art12').className = 'value ' + (stats.total_predictions > 0 ? 'good' : 'warn');
                 const art15El = document.getElementById('gov-art15');
@@ -2222,19 +2236,23 @@ class HDNAViewer {
                 // Recent activity
                 const activityEl = document.getElementById('gov-activity');
                 const records = (auditRes.records || []).slice(-8).reverse();
+                let actHtml = '';
                 if (records.length > 0) {
-                    let html = '';
                     records.forEach(r => {
                         const icon = r.correct ? '<span style="color:var(--green)">&#10003;</span>' :
                                                  '<span style="color:var(--red)">&#10007;</span>';
-                        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                        actHtml += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
                             <span>${icon} Decision #${r.step}</span>
                             <span style="color:var(--text-dim)">Confidence: ${(Math.min(1, Math.max(0, r.confidence)) * 100).toFixed(0)}%</span>
                             <span style="color:var(--text-dim)">${r.source}</span>
                         </div>`;
                     });
-                    activityEl.innerHTML = html;
                 }
+                // Add utilization context
+                actHtml += `<div style="margin-top:6px;padding-top:4px;border-top:1px solid var(--border);font-size:10px;color:var(--text-dim)">
+                    ${util.active} components active for current task. ${util.inactive} available for additional tasks or complexity.
+                </div>`;
+                activityEl.innerHTML = actHtml;
             }
 
         } catch (err) {

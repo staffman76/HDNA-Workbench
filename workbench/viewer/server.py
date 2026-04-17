@@ -63,6 +63,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._list_curricula())
         elif path == "/api/daemons/active":
             self._json_response(self._list_active_daemons())
+        elif path == "/api/governance":
+            self._json_response(self._get_governance_metrics())
         elif path == "/api/transformer":
             self._json_response(self._get_transformer_info())
         elif path == "/" or path == "/index.html":
@@ -533,6 +535,115 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
         else:
             raise ValueError(f"Unknown template: {template}")
+
+    # --- Governance Metrics ---
+
+    def _get_governance_metrics(self):
+        """Compute real stability, drift, and utilization metrics."""
+        if _adapter is None:
+            return {"error": "No model loaded"}
+
+        net = _adapter._network
+        coordinator = _adapter._coordinator
+
+        # Component Utilization
+        total_neurons = len(net.neurons)
+        active_neurons = sum(1 for n in net.neurons.values() if n.avg_activation > 0.01)
+        inactive_neurons = total_neurons - active_neurons
+        utilization_pct = active_neurons / max(1, total_neurons) * 100
+        available_capacity = inactive_neurons / max(1, total_neurons) * 100
+
+        # Decision Stability: measure consistency of the KNN daemon
+        # If the daemon has per-class examples, compute how tight each class cluster is
+        stability_score = 0.0
+        stability_detail = "No training data"
+        if coordinator:
+            for daemon in coordinator.daemons.values():
+                if hasattr(daemon, 'per_class') and daemon.per_class:
+                    # Compute intra-class variance (lower = more stable)
+                    class_variances = []
+                    for action, examples in daemon.per_class.items():
+                        if len(examples) >= 2:
+                            arr = np.array(examples)
+                            centroid = arr.mean(axis=0)
+                            dists = np.sqrt(np.sum((arr - centroid) ** 2, axis=1))
+                            class_variances.append(float(dists.mean()))
+
+                    if class_variances:
+                        avg_variance = np.mean(class_variances)
+                        # Lower variance = higher stability
+                        # Map to 0-100: variance of 0 = 100% stable
+                        stability_score = max(0, min(100, 100 - avg_variance * 200))
+
+                        if stability_score > 80:
+                            stability_detail = "Highly consistent"
+                        elif stability_score > 50:
+                            stability_detail = "Moderately consistent"
+                        elif stability_score > 20:
+                            stability_detail = "Some variation"
+                        else:
+                            stability_detail = "High variation"
+                    break  # use first daemon with data
+
+        # Model Drift: are the class centroids moving?
+        # Compare current centroids to an older snapshot
+        drift_score = 0.0
+        drift_detail = "No baseline"
+        if coordinator:
+            for daemon in coordinator.daemons.values():
+                if hasattr(daemon, 'per_class') and daemon.per_class:
+                    # Check if we have a previous centroid snapshot
+                    if not hasattr(daemon, '_prev_centroids'):
+                        daemon._prev_centroids = {}
+
+                    current_centroids = {}
+                    drifts = []
+                    for action, examples in daemon.per_class.items():
+                        if len(examples) >= 3:
+                            centroid = np.mean(examples, axis=0)
+                            current_centroids[action] = centroid
+
+                            if action in daemon._prev_centroids:
+                                dist = float(np.sqrt(np.sum(
+                                    (centroid - daemon._prev_centroids[action]) ** 2
+                                )))
+                                drifts.append(dist)
+
+                    # Update previous centroids
+                    daemon._prev_centroids = current_centroids
+
+                    if drifts:
+                        avg_drift = np.mean(drifts)
+                        drift_score = float(avg_drift)
+                        if avg_drift < 0.01:
+                            drift_detail = "Stable — no detectable drift"
+                        elif avg_drift < 0.05:
+                            drift_detail = "Minimal drift"
+                        elif avg_drift < 0.2:
+                            drift_detail = "Moderate drift — model adapting"
+                        else:
+                            drift_detail = "Significant drift — model changing"
+                    else:
+                        drift_detail = "Establishing baseline"
+                    break
+
+        return {
+            "utilization": {
+                "total": total_neurons,
+                "active": active_neurons,
+                "inactive": inactive_neurons,
+                "utilization_pct": round(utilization_pct, 1),
+                "available_capacity_pct": round(available_capacity, 1),
+            },
+            "stability": {
+                "score": round(stability_score, 1),
+                "detail": stability_detail,
+            },
+            "drift": {
+                "score": round(drift_score, 4),
+                "detail": drift_detail,
+            },
+        }
 
     # --- Curriculum Management ---
 
