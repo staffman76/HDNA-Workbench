@@ -896,17 +896,13 @@ class LiveTrainer:
             from ..core.neuron import HDNANetwork
             from ..core.brain import Brain
 
-            # Scale hidden layers proportionally
-            old_input = self.net.input_dim
-            ratio = sample_feat_dim / max(1, old_input)
-            old_layers = sorted(set(n.layer for n in self.net.neurons.values()))
-            hidden_dims = []
-            for layer_idx in old_layers:
-                if layer_idx > 0 and layer_idx < max(old_layers):
-                    count = len(self.net.get_layer_neurons(layer_idx))
-                    hidden_dims.append(max(4, int(count * max(0.5, min(2.0, ratio)))))
-            if not hidden_dims:
-                hidden_dims = [max(8, sample_feat_dim), max(4, sample_feat_dim // 2)]
+            # Use fixed sensible hidden dims based on feature dimension
+            # Don't scale from current network (may have been damaged/shrunk)
+            hidden_dims = [
+                max(16, sample_feat_dim * 2),
+                max(8, sample_feat_dim),
+                max(4, sample_feat_dim // 2),
+            ]
 
             output_dim = self.net.output_dim
             # Check if output dim needs updating too
