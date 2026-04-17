@@ -304,29 +304,113 @@ class HDNAViewer {
     buildEdges(edges) {
         if (!edges) return;
 
+        // Dot geometry shared across all edges
+        const dotGeo = new THREE.SphereGeometry(0.02, 4, 4);
+
         edges.forEach(edge => {
             const srcMesh = this.neuronMeshes[edge.source];
             const tgtMesh = this.neuronMeshes[edge.target];
             if (!srcMesh || !tgtMesh) return;
 
-            const points = [srcMesh.position.clone(), tgtMesh.position.clone()];
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
+            const src = srcMesh.position.clone();
+            const tgt = tgtMesh.position.clone();
             const strength = Math.abs(edge.strength);
-            const opacity = Math.min(0.5, 0.03 + strength * 0.4);
-            // Positive edges = white/silver, negative = warm red
             const color = edge.strength > 0 ? 0x8899aa : 0xcc4444;
 
-            const material = new THREE.LineBasicMaterial({
-                color: color,
-                transparent: true,
-                opacity: this.showEdges ? opacity : 0,
-            });
+            // Create a train of dots along the edge
+            const numDots = 5;
+            const dots = [];
+            for (let i = 0; i < numDots; i++) {
+                const t = (i + 0.5) / numDots;  // spread evenly, skip endpoints
+                const pos = new THREE.Vector3().lerpVectors(src, tgt, t);
 
-            const line = new THREE.Line(geometry, material);
-            line.userData = { edge: edge };
-            this.scene.add(line);
-            this.edgeLines.push(line);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: this.showEdges ? Math.min(0.6, 0.1 + strength * 0.4) : 0,
+                });
+                const dot = new THREE.Mesh(dotGeo, mat);
+                dot.position.copy(pos);
+                this.scene.add(dot);
+                dots.push(dot);
+            }
+
+            // Store as edge group
+            const edgeGroup = {
+                dots: dots,
+                edge: edge,
+                src: src,
+                tgt: tgt,
+                strength: strength,
+                color: color,
+            };
+            this.edgeLines.push(edgeGroup);
+        });
+    }
+
+    // Helper: set edge visibility/color across dot trains
+    setEdgeStyle(edgeGroup, color, opacity) {
+        if (!edgeGroup.dots) return;
+        edgeGroup.dots.forEach(dot => {
+            if (color !== undefined) dot.material.color.setHex(color);
+            dot.material.opacity = opacity;
+        });
+    }
+
+    setAllEdgesVisible(visible) {
+        this.edgeLines.forEach(eg => {
+            if (!eg.dots) return;
+            const opacity = visible ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0;
+            eg.dots.forEach(dot => { dot.material.opacity = opacity; });
+        });
+    }
+
+    animateEdges(time) {
+        if (!this.showEdges) return;
+
+        this.edgeLines.forEach((edgeGroup, idx) => {
+            if (!edgeGroup.dots) return;
+
+            const dots = edgeGroup.dots;
+            const numDots = dots.length;
+            const strength = edgeGroup.strength;
+            const isHot = edgeGroup._isHot;
+
+            if (this.isReplaying && isHot) {
+                // HOT EDGE in replay: fast traveling pulse (cyan)
+                const phase = (time * 3 + idx * 0.15) % 1.0;
+                const brightDot = Math.floor(phase * numDots);
+                dots.forEach((dot, i) => {
+                    dot.material.color.setHex(0x00ffcc);
+                    const dist = Math.abs(i - brightDot);
+                    dot.material.opacity = dist === 0 ? 0.9 : dist === 1 ? 0.4 : 0.15;
+                    dot.scale.setScalar(dist === 0 ? 2.0 : 1.0);
+                });
+            } else if (this.isReplaying && !isHot) {
+                // COLD EDGE in replay: nearly invisible
+                dots.forEach(dot => {
+                    dot.material.opacity = 0.02;
+                    dot.scale.setScalar(0.5);
+                });
+            } else if (this.isTraining) {
+                // TRAINING: gentle pulse proportional to strength
+                const baseOpacity = Math.min(0.4, 0.03 + strength * 0.3);
+                const phase = (time * 1.5 + idx * 0.1) % 1.0;
+                const brightDot = Math.floor(phase * numDots);
+                dots.forEach((dot, i) => {
+                    dot.material.opacity = (i === brightDot) ? baseOpacity + 0.15 : baseOpacity * 0.6;
+                    dot.scale.setScalar((i === brightDot) ? 1.3 : 1.0);
+                });
+            } else {
+                // LIVE VIEW: slow gentle pulse, just enough to show they're there
+                const baseOpacity = Math.min(0.3, 0.03 + strength * 0.25);
+                const phase = (time * 0.5 + idx * 0.08) % 1.0;
+                const brightDot = Math.floor(phase * numDots);
+                dots.forEach((dot, i) => {
+                    dot.material.opacity = (i === brightDot) ? baseOpacity + 0.1 : baseOpacity * 0.5;
+                    dot.scale.setScalar(1.0);
+                });
+            }
         });
     }
 
@@ -359,16 +443,14 @@ class HDNAViewer {
             mesh.material.emissiveIntensity = 1.0;
         }
 
-        // Highlight edges
-        this.edgeLines.forEach(line => {
-            const e = line.userData.edge;
+        // Highlight edges connected to this neuron
+        this.edgeLines.forEach(eg => {
+            if (!eg.edge) return;
+            const e = eg.edge;
             if (e.source === neuronId || e.target === neuronId) {
-                line.material.color.setHex(EDGE_HIGHLIGHT);
-                line.material.opacity = 0.8;
+                this.setEdgeStyle(eg, EDGE_HIGHLIGHT, 0.8);
             } else {
-                const str = Math.abs(e.strength);
-                line.material.color.setHex(e.strength > 0 ? 0x00d4ff : 0xff5252);
-                line.material.opacity = this.showEdges ? Math.min(0.6, 0.05 + str * 0.5) : 0;
+                this.setEdgeStyle(eg, eg.color, this.showEdges ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0);
             }
         });
 
@@ -496,11 +578,10 @@ class HDNAViewer {
             m.material.emissiveIntensity = m.userData.node.is_dead ? 0.05 :
                 0.2 + m.userData.node.avg_activation * 0.3;
         });
-        this.edgeLines.forEach(line => {
-            const e = line.userData.edge;
-            const str = Math.abs(e.strength);
-            line.material.color.setHex(e.strength > 0 ? 0x00d4ff : 0xff5252);
-            line.material.opacity = this.showEdges ? Math.min(0.6, 0.05 + str * 0.5) : 0;
+        this.edgeLines.forEach(eg => {
+            if (eg.edge) {
+                this.setEdgeStyle(eg, eg.color, this.showEdges ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0);
+            }
         });
         this.selectedNeuron = null;
     }
@@ -512,8 +593,14 @@ class HDNAViewer {
         Object.values(this.neuronMeshes).forEach(m => this.scene.remove(m));
         this.neuronMeshes = {};
 
-        // Remove all edges
-        this.edgeLines.forEach(l => this.scene.remove(l));
+        // Remove all edges (dot trains)
+        this.edgeLines.forEach(eg => {
+            if (eg.dots) {
+                eg.dots.forEach(d => this.scene.remove(d));
+            } else {
+                this.scene.remove(eg);
+            }
+        });
         this.edgeLines = [];
 
         // Remove layer meshes (for PyTorch models)
@@ -991,18 +1078,17 @@ class HDNAViewer {
             });
 
             // Light up hot edges
-            this.edgeLines.forEach(line => {
-                const e = line.userData.edge;
+            this.edgeLines.forEach(eg => {
+                if (!eg.edge) return;
+                const e = eg.edge;
                 const key = `${e.source}-${e.target}`;
 
                 if (hotEdgeSet.has(key)) {
-                    // Hot edge: bright, thick feel
-                    line.material.color.setHex(0x00ffcc);
-                    line.material.opacity = 0.7;
+                    this.setEdgeStyle(eg, 0x00ffcc, 0.8);
+                    eg._isHot = true;
                 } else {
-                    // Cold edge: very dim
-                    line.material.color.setHex(0x1a2a3e);
-                    line.material.opacity = 0.03;
+                    this.setEdgeStyle(eg, 0x1a2a3e, 0.02);
+                    eg._isHot = false;
                 }
             });
 
@@ -1033,11 +1119,11 @@ class HDNAViewer {
         });
 
         // Restore edges
-        this.edgeLines.forEach(line => {
-            const e = line.userData.edge;
-            const str = Math.abs(e.strength);
-            line.material.color.setHex(e.strength > 0 ? 0x00d4ff : 0xff5252);
-            line.material.opacity = this.showEdges ? Math.min(0.6, 0.05 + str * 0.5) : 0;
+        this.edgeLines.forEach(eg => {
+            if (eg.edge) {
+                eg._isHot = false;
+                this.setEdgeStyle(eg, eg.color, this.showEdges ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0);
+            }
         });
     }
 
@@ -1046,14 +1132,7 @@ class HDNAViewer {
     toggleEdges() {
         this.showEdges = !this.showEdges;
         document.getElementById('btn-edges').classList.toggle('active');
-        this.edgeLines.forEach(line => {
-            if (this.showEdges) {
-                const str = Math.abs(line.userData.edge.strength);
-                line.material.opacity = Math.min(0.6, 0.05 + str * 0.5);
-            } else {
-                line.material.opacity = 0;
-            }
-        });
+        this.setAllEdgesVisible(this.showEdges);
     }
 
     toggleDead() {
@@ -3009,22 +3088,23 @@ https://github.com/staffman76/HDNA-Workbench
             }
         });
 
-        // Update edge opacities based on current strengths
+        // Update edge strengths based on training
         if (data.edges) {
             const edgeMap = {};
             data.edges.forEach(e => {
                 edgeMap[`${e.source}-${e.target}`] = e.strength;
             });
 
-            this.edgeLines.forEach(line => {
-                const e = line.userData.edge;
-                const key = `${e.source}-${e.target}`;
+            this.edgeLines.forEach(eg => {
+                if (!eg.edge) return;
+                const key = `${eg.edge.source}-${eg.edge.target}`;
                 const newStrength = edgeMap[key];
                 if (newStrength !== undefined) {
-                    e.strength = newStrength;
-                    const str = Math.abs(newStrength);
-                    line.material.color.setHex(newStrength > 0 ? 0x00d4ff : 0xff5252);
-                    line.material.opacity = this.showEdges ? Math.min(0.8, 0.05 + str * 0.6) : 0;
+                    eg.edge.strength = newStrength;
+                    eg.strength = Math.abs(newStrength);
+                    eg.color = newStrength > 0 ? 0x8899aa : 0xcc4444;
+                    const opacity = this.showEdges ? Math.min(0.6, 0.05 + eg.strength * 0.5) : 0;
+                    this.setEdgeStyle(eg, eg.color, opacity);
                 }
             });
         }
@@ -3055,6 +3135,9 @@ https://github.com/staffman76/HDNA-Workbench
             });
         }
         // Training view: updateNetworkLive handles everything, no extra animation
+
+        // Animate dot trains on edges
+        this.animateEdges(time);
 
         this.renderer.render(this.scene, this.camera);
     }
