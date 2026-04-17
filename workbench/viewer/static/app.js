@@ -2,14 +2,14 @@
 // Copyright (c) 2026 Chris. All rights reserved.
 
 const LAYER_COLORS = [
-    0x00d4ff, // input - cyan
-    0x00e676, // hidden 1 - green
-    0xffab40, // hidden 2 - orange
-    0xb388ff, // hidden 3 - purple
-    0xff5252, // output - red
+    0x00d4ff, // layer 1 - cyan
+    0xff6b35, // layer 2 - burnt orange
+    0xb388ff, // layer 3 - purple
+    0xff5252, // layer 4 / output - red
     0xffd740, // extra layers...
     0x69f0ae,
     0xff80ab,
+    0x40c4ff,
 ];
 
 const DEAD_COLOR = 0x444444;
@@ -258,15 +258,27 @@ class HDNAViewer {
             const y = (idx - yOffset) * neuronSpacing;
             const z = (Math.sin(idx * 0.7) * 0.3); // slight depth variation
 
-            // Size based on activation
-            const baseSize = 0.12;
-            const actSize = Math.min(0.3, baseSize + node.avg_activation * 0.4);
-            const size = node.is_dead ? baseSize * 0.6 : actSize;
+            const isOutput = (layer === numLayers - 1);
 
-            // Color
-            const color = node.is_dead ? DEAD_COLOR : (LAYER_COLORS[layer] || LAYER_COLORS[0]);
+            // Size: output neurons are larger, dead are smaller
+            const baseSize = isOutput ? 0.18 : 0.12;
+            const actSize = Math.min(0.3, baseSize + node.avg_activation * 0.3);
+            const size = node.is_dead ? baseSize * 0.5 : actSize;
 
-            const geometry = new THREE.SphereGeometry(size, 16, 12);
+            // Color: use layer color, output layer always red/warm
+            let color;
+            if (node.is_dead) {
+                color = DEAD_COLOR;
+            } else if (isOutput) {
+                color = 0xff5252; // output always red — distinct from hidden layers
+            } else {
+                color = LAYER_COLORS[layer % LAYER_COLORS.length] || LAYER_COLORS[0];
+            }
+
+            // Output neurons use octahedron (diamond shape), hidden use spheres
+            const geometry = isOutput ?
+                new THREE.OctahedronGeometry(size * 1.2) :
+                new THREE.SphereGeometry(size, 16, 12);
             const material = new THREE.MeshPhongMaterial({
                 color: color,
                 emissive: color,
@@ -277,7 +289,7 @@ class HDNAViewer {
 
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(x, y, z);
-            mesh.userData = { neuronId: node.id, node: node };
+            mesh.userData = { neuronId: node.id, node: node, isOutput: isOutput };
             this.scene.add(mesh);
             this.neuronMeshes[node.id] = mesh;
         });
@@ -301,8 +313,9 @@ class HDNAViewer {
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
             const strength = Math.abs(edge.strength);
-            const opacity = Math.min(0.6, 0.05 + strength * 0.5);
-            const color = edge.strength > 0 ? 0x00d4ff : 0xff5252;
+            const opacity = Math.min(0.5, 0.03 + strength * 0.4);
+            // Positive edges = white/silver, negative = warm red
+            const color = edge.strength > 0 ? 0x8899aa : 0xcc4444;
 
             const material = new THREE.LineBasicMaterial({
                 color: color,
@@ -3023,25 +3036,54 @@ https://github.com/staffman76/HDNA-Workbench
         requestAnimationFrame(() => this.animate());
         this.updateCamera();
 
-        // Gentle pulse on active neurons (only when idle - not replaying or training)
+        const time = Date.now() * 0.001;
+
         if (!this.isReplaying && !this.isTraining) {
-            const time = Date.now() * 0.001;
+            // LIVE VIEW: each layer pulses at a different rate
+            // Creates a visual "breathing" effect that shows the network is alive
             Object.values(this.neuronMeshes).forEach(m => {
                 if (!m.userData.node.is_dead && m.userData.neuronId !== this.selectedNeuron) {
-                    const base = 0.2 + m.userData.node.avg_activation * 0.3;
-                    m.material.emissiveIntensity = base + Math.sin(time * 2 + m.userData.neuronId) * 0.05;
+                    const layer = m.userData.node.layer || 0;
+                    const act = m.userData.node.avg_activation || 0;
+                    // Different frequency per layer — creates a wave effect
+                    const freq = 1.5 + layer * 0.4;
+                    const phase = m.userData.neuronId * 0.5;
+                    const base = 0.15 + act * 0.35;
+                    const pulse = Math.sin(time * freq + phase) * 0.08;
+                    m.material.emissiveIntensity = base + pulse;
+                    // Subtle scale breathing
+                    const scalePulse = 1.0 + Math.sin(time * freq * 0.5 + phase) * 0.03;
+                    m.scale.setScalar(scalePulse);
                 }
             });
         } else if (this.isReplaying) {
-            // During replay: pulse the chosen output neuron
-            const time = Date.now() * 0.003;
+            // REPLAY VIEW: chosen output pulses prominently
             Object.values(this.neuronMeshes).forEach(m => {
-                if (m.scale.x > 1.4) {
-                    m.material.emissiveIntensity = 0.7 + Math.sin(time) * 0.3;
+                if (m.scale.x > 1.3) {
+                    // Chosen output neuron — strong pulse
+                    m.material.emissiveIntensity = 0.6 + Math.sin(time * 4) * 0.4;
+                }
+            });
+
+            // Animate signal flow along hot edges
+            this.edgeLines.forEach(line => {
+                if (line.material.opacity > 0.3) {
+                    // Hot edge — pulse brightness
+                    const pulse = 0.5 + Math.sin(time * 3 + line.id * 0.3) * 0.3;
+                    line.material.opacity = pulse;
+                }
+            });
+        } else if (this.isTraining) {
+            // TRAINING VIEW: fast activity pulses
+            // updateNetworkLive handles the main visuals
+            // Add subtle edge shimmer during training
+            this.edgeLines.forEach(line => {
+                if (line.material.opacity > 0.05) {
+                    const shimmer = Math.sin(time * 5 + (line.id || 0) * 0.2) * 0.1;
+                    line.material.opacity = Math.max(0.02, line.material.opacity + shimmer);
                 }
             });
         }
-        // During training: updateNetworkLive handles the visuals
 
         this.renderer.render(this.scene, this.camera);
     }
