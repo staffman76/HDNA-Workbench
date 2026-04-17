@@ -916,6 +916,90 @@ class HDNAViewer {
 
     // --- Trace stepper ---
 
+    showSelectedDecision(record) {
+        const panel = document.getElementById('audit-selected');
+        const body = document.getElementById('audit-selected-body');
+        if (!panel || !body) return;
+
+        const conf = Math.min(1, Math.max(0, record.confidence || 0));
+        const resultColor = record.correct ? 'var(--green)' : 'var(--red)';
+        const resultText = record.correct ? 'Correct' : 'Incorrect';
+        const confColor = conf > 0.7 ? 'var(--green)' : conf > 0.4 ? 'var(--orange)' : 'var(--red)';
+
+        let html = `
+            <table style="width:100%;font-size:11px;border-collapse:collapse">
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Step</td>
+                    <td style="padding:3px 0;text-align:right;color:var(--accent);font-weight:600">${record.step}</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Result</td>
+                    <td style="padding:3px 0;text-align:right;color:${resultColor};font-weight:600">${resultText}</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Predicted Class</td>
+                    <td style="padding:3px 0;text-align:right">${record.chosen_class}</td>
+                </tr>`;
+
+        if (record.chosen_label) {
+            html += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Label</td>
+                    <td style="padding:3px 0;text-align:right">${record.chosen_label}</td>
+                </tr>`;
+        }
+
+        html += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Confidence</td>
+                    <td style="padding:3px 0;text-align:right;color:${confColor}">${(conf * 100).toFixed(1)}%</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Source</td>
+                    <td style="padding:3px 0;text-align:right">${record.source || '-'}</td>
+                </tr>`;
+
+        if (record.source_reason) {
+            html += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:3px 0;color:var(--text-dim)">Reason</td>
+                    <td style="padding:3px 0;text-align:right">${record.source_reason}</td>
+                </tr>`;
+        }
+
+        if (record.reward !== undefined) {
+            const rewColor = record.reward > 0 ? 'var(--green)' : 'var(--red)';
+            html += `
+                <tr>
+                    <td style="padding:3px 0;color:var(--text-dim)">Reward</td>
+                    <td style="padding:3px 0;text-align:right;color:${rewColor}">${record.reward}</td>
+                </tr>`;
+        }
+
+        html += `</table>`;
+
+        // Highlight which row in the audit list is selected
+        document.querySelectorAll('.audit-row').forEach((row, i) => {
+            row.style.background = '';
+        });
+        // Find the row for this step
+        const rows = document.querySelectorAll('.audit-row');
+        rows.forEach(row => {
+            const stepText = row.querySelector('.step');
+            if (stepText && stepText.textContent == record.step) {
+                row.style.background = 'rgba(0, 212, 255, 0.1)';
+            }
+        });
+
+        body.innerHTML = html;
+        panel.style.display = 'block';
+    }
+
+    hideSelectedDecision() {
+        const panel = document.getElementById('audit-selected');
+        if (panel) panel.style.display = 'none';
+    }
+
     toggleReplayMode() {
         const btn = document.getElementById('btn-replay-toggle');
         if (this.isReplaying) {
@@ -976,6 +1060,9 @@ class HDNAViewer {
         const correct = record.correct;
         stepLabel.textContent = `Step ${record.step} ${correct ? '  OK' : '  X'}`;
         stepLabel.style.color = correct ? 'var(--green)' : 'var(--red)';
+
+        // Update the selected decision card in the Audit tab
+        this.showSelectedDecision(record);
 
         // Fetch replay data with per-neuron activations
         try {
@@ -1050,6 +1137,7 @@ class HDNAViewer {
     resetTraceHighlights() {
         // Restore neurons to default appearance — back to live view
         this.isReplaying = false;
+        this.hideSelectedDecision();
         const btn = document.getElementById('btn-replay-toggle');
         if (btn) {
             btn.textContent = 'Replay';
