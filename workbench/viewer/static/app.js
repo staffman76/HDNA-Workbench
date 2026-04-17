@@ -2311,18 +2311,65 @@ https://github.com/staffman76/HDNA-Workbench
             document.getElementById('train-ep').textContent = stats.episode || 0;
 
             const acc50 = stats.accuracy_50 || 0;
-            // Show smoothed accuracy (less noisy than raw rolling)
-            const smoothWindow = this.chartData.smoothed;
-            const displayAcc = smoothWindow.length > 0 ? smoothWindow[smoothWindow.length - 1] : acc50;
+            const episode = stats.episode || 0;
+
+            // Track lifetime totals (must be before any display code)
+            data.steps.forEach(s => {
+                this.chartData.allTotal++;
+                if (s.correct) this.chartData.allCorrect++;
+            });
+            const lifetimeAcc = this.chartData.allTotal > 0 ?
+                this.chartData.allCorrect / this.chartData.allTotal : 0;
+
+            // Record chart data (skip first 10 episodes)
+            if (episode >= 10) {
+                this.chartData.accuracy.push(acc50);
+                this.chartData.epsilon.push(lastStep.epsilon || 0);
+
+                const raw = this.chartData.accuracy;
+                const smoothWin = Math.min(10, raw.length);
+                const smoothed = raw.slice(-smoothWin).reduce((a, b) => a + b, 0) / smoothWin;
+                this.chartData.smoothed.push(smoothed);
+
+                if (this.chartData.accuracy.length > this.chartData.maxPoints) {
+                    this.chartData.accuracy.shift();
+                    this.chartData.epsilon.shift();
+                    this.chartData.smoothed.shift();
+                }
+                this.drawChart();
+            }
+
+            // Smoothed accuracy for display
+            const smoothArr = this.chartData.smoothed;
+            const displayAcc = smoothArr.length > 0 ? smoothArr[smoothArr.length - 1] : acc50;
+
+            // Update all display elements
             const accEl = document.getElementById('train-acc');
             accEl.textContent = (displayAcc * 100).toFixed(1) + '%';
             accEl.style.color = displayAcc > 0.5 ? 'var(--green)' : displayAcc > 0.25 ? 'var(--orange)' : 'var(--red)';
 
+            document.getElementById('train-lifetime').textContent =
+                (lifetimeAcc * 100).toFixed(1) + '%';
             document.getElementById('train-eps').textContent = lastStep.epsilon || 0;
-            // Show curriculum's current progression level, not just last task's level
+
             const curProgress = stats.curriculum || {};
             document.getElementById('train-level').textContent =
                 curProgress.current_level || lastStep.level || '-';
+
+            const lr = lastStep.lr || 0;
+            document.getElementById('train-lr').textContent = lr.toFixed(4);
+            document.getElementById('train-neurons').textContent =
+                Object.keys(data.neuron_states).length;
+
+            if (displayAcc > this.chartData.bestAccuracy) {
+                this.chartData.bestAccuracy = displayAcc;
+            }
+            document.getElementById('train-best').textContent =
+                (this.chartData.bestAccuracy * 100).toFixed(1) + '%';
+
+            document.getElementById('stat-neurons').textContent =
+                Object.keys(data.neuron_states).length;
+            document.getElementById('chart-episodes').textContent = episode;
 
             // Show last few results
             const lastN = data.steps.slice(-5).reverse();
@@ -2344,56 +2391,6 @@ https://github.com/staffman76/HDNA-Workbench
             // Pulse the training indicator
             const pulse = document.getElementById('train-pulse');
             pulse.style.opacity = pulse.style.opacity === '0.3' ? '1' : '0.3';
-
-            // Extra stats
-            const lr = lastStep.lr || 0;
-            document.getElementById('train-lr').textContent = lr.toFixed(4);
-            document.getElementById('train-neurons').textContent =
-                Object.keys(data.neuron_states).length;
-
-            // Lifetime accuracy
-            document.getElementById('train-lifetime').textContent =
-                (lifetimeAcc * 100).toFixed(1) + '%';
-
-            // Track best accuracy
-            if (displayAcc > this.chartData.bestAccuracy) {
-                this.chartData.bestAccuracy = acc50;
-            }
-            document.getElementById('train-best').textContent =
-                (this.chartData.bestAccuracy * 100).toFixed(1) + '%';
-
-            // Update header stats
-            document.getElementById('stat-neurons').textContent =
-                Object.keys(data.neuron_states).length;
-
-            // Record chart data (skip first 10 episodes — too noisy)
-            const episode = stats.episode || 0;
-
-            // Track lifetime totals
-            data.steps.forEach(s => {
-                this.chartData.allTotal++;
-                if (s.correct) this.chartData.allCorrect++;
-            });
-            const lifetimeAcc = this.chartData.allTotal > 0 ?
-                this.chartData.allCorrect / this.chartData.allTotal : 0;
-
-            if (episode >= 10) {
-                this.chartData.accuracy.push(acc50);
-                this.chartData.epsilon.push(lastStep.epsilon || 0);
-
-                // Smoothed: moving average of last 10 raw values
-                const raw = this.chartData.accuracy;
-                const window = Math.min(10, raw.length);
-                const smoothed = raw.slice(-window).reduce((a, b) => a + b, 0) / window;
-                this.chartData.smoothed.push(smoothed);
-
-                if (this.chartData.accuracy.length > this.chartData.maxPoints) {
-                    this.chartData.accuracy.shift();
-                    this.chartData.epsilon.shift();
-                    this.chartData.smoothed.shift();
-                }
-                this.drawChart();
-            }
             document.getElementById('chart-episodes').textContent = episode;
 
             // Update graphs
