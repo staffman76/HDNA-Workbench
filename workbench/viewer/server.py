@@ -560,30 +560,38 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         if coordinator:
             for daemon in coordinator.daemons.values():
                 if hasattr(daemon, 'per_class') and daemon.per_class:
-                    # Compute intra-class variance (lower = more stable)
-                    class_variances = []
+                    # Compute intra-class cosine similarity (higher = more stable)
+                    class_similarities = []
                     for action, examples in daemon.per_class.items():
-                        if len(examples) >= 2:
+                        if len(examples) >= 3:
                             arr = np.array(examples)
                             centroid = arr.mean(axis=0)
-                            dists = np.sqrt(np.sum((arr - centroid) ** 2, axis=1))
-                            class_variances.append(float(dists.mean()))
+                            cn = np.linalg.norm(centroid)
+                            if cn > 0:
+                                sims = []
+                                for ex in examples:
+                                    en = np.linalg.norm(ex)
+                                    if en > 0:
+                                        sims.append(float(np.dot(ex, centroid) / (en * cn)))
+                                if sims:
+                                    class_similarities.append(np.mean(sims))
 
-                    if class_variances:
-                        avg_variance = np.mean(class_variances)
-                        # Lower variance = higher stability
-                        # Map to 0-100: variance of 0 = 100% stable
-                        stability_score = max(0, min(100, 100 - avg_variance * 200))
+                    if class_similarities:
+                        avg_sim = np.mean(class_similarities)
+                        # Cosine sim ranges -1 to 1. Map to 0-100%
+                        stability_score = max(0, min(100, avg_sim * 100))
 
-                        if stability_score > 80:
+                        if stability_score > 85:
                             stability_detail = "Highly consistent"
+                        elif stability_score > 70:
+                            stability_detail = "Consistent"
                         elif stability_score > 50:
                             stability_detail = "Moderately consistent"
-                        elif stability_score > 20:
+                        elif stability_score > 30:
                             stability_detail = "Some variation"
                         else:
                             stability_detail = "High variation"
-                    break  # use first daemon with data
+                    break
 
         # Model Drift: are the class centroids moving?
         # Compare current centroids to an older snapshot
@@ -615,11 +623,11 @@ class ViewerHandler(SimpleHTTPRequestHandler):
                     if drifts:
                         avg_drift = np.mean(drifts)
                         drift_score = float(avg_drift)
-                        if avg_drift < 0.01:
+                        if avg_drift < 0.05:
                             drift_detail = "Stable — no detectable drift"
-                        elif avg_drift < 0.05:
-                            drift_detail = "Minimal drift"
                         elif avg_drift < 0.2:
+                            drift_detail = "Minimal drift"
+                        elif avg_drift < 0.5:
                             drift_detail = "Moderate drift — model adapting"
                         else:
                             drift_detail = "Significant drift — model changing"

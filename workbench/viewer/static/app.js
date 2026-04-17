@@ -2216,14 +2216,14 @@ class HDNAViewer {
 
                 // Anomalies
                 const anomalies = [];
-                if (util.utilization_pct < 10) anomalies.push('Very low utilization');
-                if (stab.score < 20 && stab.score > 0) anomalies.push('Unstable decisions');
-                if (drift.score > 0.2) anomalies.push('Significant drift');
+                if (util.utilization_pct < 10 && stats.total_predictions > 50) anomalies.push('Very low utilization');
+                if (stab.score > 0 && stab.score < 30 && stats.total_predictions > 100) anomalies.push('Decision inconsistency');
+                if (drift.score > 0.5) anomalies.push('Significant drift');
                 const anomEl = document.getElementById('gov-anomalies');
                 anomEl.textContent = anomalies.length === 0 ? 'None' : anomalies.join(', ');
                 anomEl.className = 'value ' + (anomalies.length === 0 ? 'good' : 'warn');
 
-                const healthy = anomalies.length === 0 && stab.score > 40;
+                const healthy = anomalies.length === 0 && (acc > 0.5 || stats.total_predictions < 50);
                 this._setGovStatus(healthy, anomalies);
 
                 // Compliance
