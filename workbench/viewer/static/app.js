@@ -1944,6 +1944,8 @@ class HDNAViewer {
             sidepanel.style.display = 'none';
             document.querySelector('#header h1').textContent = 'AI Governance Dashboard';
             this.updateGovernancePanel();
+            // Auto-refresh while in governance mode
+            this._govRefreshInterval = setInterval(() => this.updateGovernancePanel(), 2000);
         } else {
             btn.textContent = 'Governance View';
             btn.style.borderColor = 'var(--border)';
@@ -1951,120 +1953,212 @@ class HDNAViewer {
             overlay.style.display = 'none';
             sidepanel.style.display = 'flex';
             document.querySelector('#header h1').textContent = 'HDNA Workbench';
+            if (this._govRefreshInterval) {
+                clearInterval(this._govRefreshInterval);
+                this._govRefreshInterval = null;
+            }
         }
     }
 
     async updateGovernancePanel() {
         try {
-            const [modelRes, stressRes, auditRes, daemonRes] = await Promise.all([
+            // Check if transformer is active
+            const txRes = await fetch('/api/transformer').then(r => r.json());
+            const isTransformer = txRes.exists && this._transformerRunning;
+
+            const [modelRes, stressRes, auditRes] = await Promise.all([
                 fetch('/api/model').then(r => r.json()),
                 fetch('/api/stress').then(r => r.json()),
                 fetch('/api/audit?count=200').then(r => r.json()),
-                fetch('/api/daemons').then(r => r.json()),
             ]);
 
-            // Model name
-            document.getElementById('gov-model-name').textContent = modelRes.name || 'Unknown';
-
-            // Total decisions
             const stats = auditRes.stats || {};
-            document.getElementById('gov-total-decisions').textContent =
-                (stats.total_predictions || 0).toLocaleString();
 
-            // Accuracy
-            const acc = stats.accuracy_100 || 0;
-            const accEl = document.getElementById('gov-accuracy');
-            accEl.textContent = (acc * 100).toFixed(1) + '%';
-            accEl.className = 'value ' + (acc > 0.7 ? 'good' : acc > 0.4 ? 'warn' : 'bad');
+            if (isTransformer) {
+                // --- Transformer Governance ---
+                const snap = txRes.snapshot || {};
+                const headReport = txRes.head_report || [];
+                const expertReport = txRes.expert_report || [];
 
-            // Components
-            const extra = modelRes.extra || {};
-            document.getElementById('gov-components').textContent =
-                (extra.num_neurons || modelRes.layer_count || 0) + ' components, ' +
-                (modelRes.layer_count || 0) + ' layers';
+                document.getElementById('gov-model-name').textContent =
+                    `Inspectable Transformer (${(snap.parameters || 0).toLocaleString()} params)`;
 
-            // Risk indicators
-            const dead = stressRes.dead_pct || 0;
-            const deadEl = document.getElementById('gov-dead');
-            deadEl.textContent = dead.toFixed(1) + '%';
-            deadEl.className = 'value ' + (dead < 10 ? 'good' : dead < 30 ? 'warn' : 'bad');
+                document.getElementById('gov-total-decisions').textContent =
+                    (snap.total_forwards || 0).toLocaleString() + ' forward passes';
 
-            const jitter = stressRes.avg_jitter || 0;
-            const stabEl = document.getElementById('gov-stability');
-            stabEl.textContent = jitter < 0.01 ? 'Stable' : jitter < 0.1 ? 'Minor Fluctuation' : 'Unstable';
-            stabEl.className = 'value ' + (jitter < 0.01 ? 'good' : jitter < 0.1 ? 'warn' : 'bad');
+                // Accuracy from training
+                const acc = this.chartData.bestAccuracy || 0;
+                const accEl = document.getElementById('gov-accuracy');
+                accEl.textContent = (acc * 100).toFixed(1) + '%';
+                accEl.className = 'value ' + (acc > 0.7 ? 'good' : acc > 0.3 ? 'warn' : 'bad');
 
-            const drift = stressRes.avg_weight_drift || 0;
-            const driftEl = document.getElementById('gov-drift');
-            driftEl.textContent = drift < 0.001 ? 'None Detected' : drift < 0.01 ? 'Minor' : 'Significant';
-            driftEl.className = 'value ' + (drift < 0.001 ? 'good' : drift < 0.01 ? 'warn' : 'bad');
+                // Components
+                const totalHeads = headReport.length;
+                const activeHeads = headReport.filter(h => !h.is_dead).length;
+                const specializedHeads = headReport.filter(h => h.tag !== 'balanced' && !h.tag.startsWith('head_')).length;
+                document.getElementById('gov-components').textContent =
+                    `${totalHeads} heads, ${snap.n_experts * snap.n_layers} experts, ${snap.n_layers} layers`;
 
-            const warnings = stressRes.warnings || [];
-            const anomEl = document.getElementById('gov-anomalies');
-            anomEl.textContent = warnings.length === 0 ? 'None' : warnings.length + ' warning(s)';
-            anomEl.className = 'value ' + (warnings.length === 0 ? 'good' : 'bad');
+                // Risk indicators — transformer specific
+                const deadHeads = headReport.filter(h => h.is_dead).length;
+                const deadEl = document.getElementById('gov-dead');
+                deadEl.textContent = `${deadHeads} dead heads (${totalHeads > 0 ? (deadHeads/totalHeads*100).toFixed(0) : 0}%)`;
+                deadEl.className = 'value ' + (deadHeads === 0 ? 'good' : deadHeads <= 1 ? 'warn' : 'bad');
 
-            // Overall status
-            const healthy = (dead < 30 && warnings.length === 0 && jitter < 0.1);
-            const statusLight = document.getElementById('gov-status-light');
-            const statusText = document.getElementById('gov-status-text');
-            const statusSub = document.getElementById('gov-status-sub');
-            const statusCard = document.getElementById('gov-status-card');
+                // Stability: head entropy variance (low = stable specialization)
+                const entropies = headReport.map(h => h.avg_entropy);
+                const entropyVar = entropies.length > 1 ?
+                    entropies.reduce((s, e) => s + (e - entropies.reduce((a,b)=>a+b,0)/entropies.length)**2, 0) / entropies.length : 0;
+                const stabEl = document.getElementById('gov-stability');
+                stabEl.textContent = entropyVar > 0.3 ? 'Heads Specializing' : entropyVar > 0.1 ? 'Moderate Differentiation' : 'Uniform (early training)';
+                stabEl.className = 'value ' + (entropyVar > 0.3 ? 'good' : entropyVar > 0.1 ? 'warn' : 'neutral');
 
-            if (healthy) {
-                statusLight.style.background = 'var(--green)';
-                statusText.textContent = 'System Healthy';
-                statusText.style.color = 'var(--green)';
-                statusSub.textContent = 'All monitored models operating normally';
-                statusCard.style.borderColor = 'var(--green)';
-            } else if (warnings.length > 0) {
-                statusLight.style.background = 'var(--red)';
-                statusText.textContent = 'Attention Required';
-                statusText.style.color = 'var(--red)';
-                statusSub.textContent = warnings.join(', ');
-                statusCard.style.borderColor = 'var(--red)';
-            } else {
-                statusLight.style.background = 'var(--orange)';
-                statusText.textContent = 'Review Recommended';
-                statusText.style.color = 'var(--orange)';
-                statusSub.textContent = 'Some metrics outside optimal range';
-                statusCard.style.borderColor = 'var(--orange)';
-            }
+                // Drift: expert load balance
+                const allUsage = expertReport.flatMap(e => e.usage_pct);
+                const maxUsage = Math.max(...allUsage);
+                const minUsage = Math.min(...allUsage);
+                const imbalance = maxUsage - minUsage;
+                const driftEl = document.getElementById('gov-drift');
+                driftEl.textContent = imbalance < 20 ? 'Balanced' : imbalance < 40 ? 'Minor Imbalance' : 'Significant Imbalance';
+                driftEl.className = 'value ' + (imbalance < 20 ? 'good' : imbalance < 40 ? 'warn' : 'bad');
 
-            // Compliance status based on features present
-            document.getElementById('gov-art12').textContent = stats.total_predictions > 0 ? 'Compliant' : 'No Data';
-            document.getElementById('gov-art12').className = 'value ' + (stats.total_predictions > 0 ? 'good' : 'warn');
+                // Anomalies
+                const anomEl = document.getElementById('gov-anomalies');
+                const anomalies = [];
+                if (deadHeads > 0) anomalies.push(`${deadHeads} dead head(s)`);
+                if (imbalance > 40) anomalies.push('expert load imbalance');
+                anomEl.textContent = anomalies.length === 0 ? 'None' : anomalies.join(', ');
+                anomEl.className = 'value ' + (anomalies.length === 0 ? 'good' : 'warn');
 
-            // Art 15 - robustness
-            const art15El = document.getElementById('gov-art15');
-            if (healthy) {
-                art15El.textContent = 'Compliant';
-                art15El.className = 'value good';
-            } else {
-                art15El.textContent = 'Review Needed';
-                art15El.className = 'value warn';
-            }
+                // Overall status
+                const healthy = deadHeads === 0 && imbalance < 40;
+                this._setGovStatus(healthy, anomalies);
 
-            // Recent activity
-            const activityEl = document.getElementById('gov-activity');
-            const records = (auditRes.records || []).slice(-8).reverse();
-            if (records.length > 0) {
-                let html = '';
-                records.forEach(r => {
-                    const time = new Date(r.timestamp * 1000).toLocaleTimeString();
-                    const icon = r.correct ? '<span style="color:var(--green)">&#10003;</span>' :
-                                             '<span style="color:var(--red)">&#10007;</span>';
-                    html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
-                        <span>${icon} Decision #${r.step}</span>
-                        <span style="color:var(--text-dim)">Confidence: ${(Math.min(1, Math.max(0, r.confidence)) * 100).toFixed(0)}%</span>
-                        <span style="color:var(--text-dim)">${r.source}</span>
+                // Compliance
+                document.getElementById('gov-art12').textContent = snap.total_forwards > 0 ? 'Compliant' : 'No Data';
+                document.getElementById('gov-art12').className = 'value ' + (snap.total_forwards > 0 ? 'good' : 'warn');
+                document.getElementById('gov-art13').textContent = 'Compliant';
+                document.getElementById('gov-art13').className = 'value good';
+                document.getElementById('gov-art15').textContent = healthy ? 'Compliant' : 'Review Needed';
+                document.getElementById('gov-art15').className = 'value ' + (healthy ? 'good' : 'warn');
+
+                // Recent activity — show head specialization timeline
+                const activityEl = document.getElementById('gov-activity');
+                let actHtml = '';
+                headReport.forEach(h => {
+                    const tagColor = h.is_dead ? 'var(--red)' :
+                        h.tag === 'sharp_selector' ? 'var(--green)' :
+                        h.tag === 'local_focus' ? 'var(--accent)' :
+                        h.tag === 'position_tracker' ? 'var(--purple)' :
+                        h.tag === 'global_mixer' ? 'var(--orange)' :
+                        'var(--text-dim)';
+                    actHtml += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <span>L${h.layer} Head ${h.head}</span>
+                        <span style="color:${tagColor};font-weight:600">${h.tag}</span>
+                        <span style="color:var(--text-dim)">ent:${h.avg_entropy.toFixed(2)}</span>
                     </div>`;
                 });
-                activityEl.innerHTML = html;
+                // Expert usage
+                expertReport.forEach(e => {
+                    actHtml += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <span style="color:var(--orange)">Layer ${e.layer} Experts</span>
+                        <span style="color:var(--text-dim)">${e.usage_pct.map(p => p.toFixed(0) + '%').join(' | ')}</span>
+                    </div>`;
+                });
+                activityEl.innerHTML = actHtml;
+
+            } else {
+                // --- HDNA Governance (original) ---
+                document.getElementById('gov-model-name').textContent = modelRes.name || 'Unknown';
+                document.getElementById('gov-total-decisions').textContent =
+                    (stats.total_predictions || 0).toLocaleString();
+
+                const acc = stats.accuracy_100 || 0;
+                const accEl = document.getElementById('gov-accuracy');
+                accEl.textContent = (acc * 100).toFixed(1) + '%';
+                accEl.className = 'value ' + (acc > 0.7 ? 'good' : acc > 0.4 ? 'warn' : 'bad');
+
+                const extra = modelRes.extra || {};
+                document.getElementById('gov-components').textContent =
+                    (extra.num_neurons || modelRes.layer_count || 0) + ' components, ' +
+                    (modelRes.layer_count || 0) + ' layers';
+
+                const dead = stressRes.dead_pct || 0;
+                const deadEl = document.getElementById('gov-dead');
+                deadEl.textContent = dead.toFixed(1) + '%';
+                deadEl.className = 'value ' + (dead < 10 ? 'good' : dead < 30 ? 'warn' : 'bad');
+
+                const jitter = stressRes.avg_jitter || 0;
+                const stabEl = document.getElementById('gov-stability');
+                stabEl.textContent = jitter < 0.01 ? 'Stable' : jitter < 0.1 ? 'Minor Fluctuation' : 'Unstable';
+                stabEl.className = 'value ' + (jitter < 0.01 ? 'good' : jitter < 0.1 ? 'warn' : 'bad');
+
+                const drift = stressRes.avg_weight_drift || 0;
+                const driftEl = document.getElementById('gov-drift');
+                driftEl.textContent = drift < 0.001 ? 'None Detected' : drift < 0.01 ? 'Minor' : 'Significant';
+                driftEl.className = 'value ' + (drift < 0.001 ? 'good' : drift < 0.01 ? 'warn' : 'bad');
+
+                const warnings = stressRes.warnings || [];
+                const anomEl = document.getElementById('gov-anomalies');
+                anomEl.textContent = warnings.length === 0 ? 'None' : warnings.length + ' warning(s)';
+                anomEl.className = 'value ' + (warnings.length === 0 ? 'good' : 'bad');
+
+                const healthy = (dead < 30 && warnings.length === 0 && jitter < 0.1);
+                this._setGovStatus(healthy, warnings);
+
+                document.getElementById('gov-art12').textContent = stats.total_predictions > 0 ? 'Compliant' : 'No Data';
+                document.getElementById('gov-art12').className = 'value ' + (stats.total_predictions > 0 ? 'good' : 'warn');
+                const art15El = document.getElementById('gov-art15');
+                art15El.textContent = healthy ? 'Compliant' : 'Review Needed';
+                art15El.className = 'value ' + (healthy ? 'good' : 'warn');
+
+                // Recent activity
+                const activityEl = document.getElementById('gov-activity');
+                const records = (auditRes.records || []).slice(-8).reverse();
+                if (records.length > 0) {
+                    let html = '';
+                    records.forEach(r => {
+                        const icon = r.correct ? '<span style="color:var(--green)">&#10003;</span>' :
+                                                 '<span style="color:var(--red)">&#10007;</span>';
+                        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                            <span>${icon} Decision #${r.step}</span>
+                            <span style="color:var(--text-dim)">Confidence: ${(Math.min(1, Math.max(0, r.confidence)) * 100).toFixed(0)}%</span>
+                            <span style="color:var(--text-dim)">${r.source}</span>
+                        </div>`;
+                    });
+                    activityEl.innerHTML = html;
+                }
             }
 
         } catch (err) {
             console.error('Failed to update governance panel:', err);
+        }
+    }
+
+    _setGovStatus(healthy, issues) {
+        const statusLight = document.getElementById('gov-status-light');
+        const statusText = document.getElementById('gov-status-text');
+        const statusSub = document.getElementById('gov-status-sub');
+        const statusCard = document.getElementById('gov-status-card');
+
+        if (healthy) {
+            statusLight.style.background = 'var(--green)';
+            statusText.textContent = 'System Healthy';
+            statusText.style.color = 'var(--green)';
+            statusSub.textContent = 'All components operating normally';
+            statusCard.style.borderColor = 'var(--green)';
+        } else if (issues && issues.length > 0) {
+            statusLight.style.background = 'var(--orange)';
+            statusText.textContent = 'Review Recommended';
+            statusText.style.color = 'var(--orange)';
+            statusSub.textContent = Array.isArray(issues) ? issues.join(', ') : String(issues);
+            statusCard.style.borderColor = 'var(--orange)';
+        } else {
+            statusLight.style.background = 'var(--orange)';
+            statusText.textContent = 'Review Recommended';
+            statusText.style.color = 'var(--orange)';
+            statusSub.textContent = 'Some metrics outside optimal range';
+            statusCard.style.borderColor = 'var(--orange)';
         }
     }
 
