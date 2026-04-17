@@ -304,10 +304,18 @@ class HDNAViewer {
     buildEdges(edges) {
         if (!edges) return;
 
-        // Dot geometry shared across all edges
-        const dotGeo = new THREE.SphereGeometry(0.02, 4, 4);
+        // Only show the strongest edges to avoid visual clutter
+        // Sort by absolute strength, take top N
+        const sortedEdges = [...edges].sort((a, b) => Math.abs(b.strength) - Math.abs(a.strength));
+        const maxEdges = Math.min(sortedEdges.length, 80);
+        const topEdges = sortedEdges.slice(0, maxEdges);
 
-        edges.forEach(edge => {
+        // Find the max strength for normalization
+        const maxStrength = topEdges.length > 0 ? Math.abs(topEdges[0].strength) : 1;
+
+        const dotGeo = new THREE.SphereGeometry(0.025, 4, 4);
+
+        topEdges.forEach(edge => {
             const srcMesh = this.neuronMeshes[edge.source];
             const tgtMesh = this.neuronMeshes[edge.target];
             if (!srcMesh || !tgtMesh) return;
@@ -315,19 +323,22 @@ class HDNAViewer {
             const src = srcMesh.position.clone();
             const tgt = tgtMesh.position.clone();
             const strength = Math.abs(edge.strength);
+            const normalizedStrength = strength / maxStrength;
             const color = edge.strength > 0 ? 0x8899aa : 0xcc4444;
 
-            // Create a train of dots along the edge
-            const numDots = 5;
+            // Number of dots based on distance
+            const dist = src.distanceTo(tgt);
+            const numDots = Math.max(3, Math.min(8, Math.floor(dist / 0.3)));
+
             const dots = [];
             for (let i = 0; i < numDots; i++) {
-                const t = (i + 0.5) / numDots;  // spread evenly, skip endpoints
+                const t = (i + 0.5) / numDots;
                 const pos = new THREE.Vector3().lerpVectors(src, tgt, t);
 
                 const mat = new THREE.MeshBasicMaterial({
                     color: color,
                     transparent: true,
-                    opacity: this.showEdges ? Math.min(0.6, 0.1 + strength * 0.4) : 0,
+                    opacity: this.showEdges ? Math.min(0.5, 0.05 + normalizedStrength * 0.4) : 0,
                 });
                 const dot = new THREE.Mesh(dotGeo, mat);
                 dot.position.copy(pos);
@@ -335,13 +346,12 @@ class HDNAViewer {
                 dots.push(dot);
             }
 
-            // Store as edge group
             const edgeGroup = {
                 dots: dots,
                 edge: edge,
                 src: src,
                 tgt: tgt,
-                strength: strength,
+                strength: normalizedStrength,
                 color: color,
             };
             this.edgeLines.push(edgeGroup);
