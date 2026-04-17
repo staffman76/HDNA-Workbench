@@ -2199,6 +2199,25 @@ https://github.com/staffman76/HDNA-Workbench
         this.chartData.epsilon = [];
         this.chartData.bestAccuracy = 0;
         this.graphHistory = null;
+
+        // Clear the chart canvases immediately
+        ['accuracy-chart', 'graph-accuracy', 'graph-activity', 'graph-confidence',
+         'graph-dead', 'graph-drift', 'graph-spread', 'graph-scaffold'].forEach(id => {
+            const c = document.getElementById(id);
+            if (c && c.getContext) {
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(0, 0, c.width, c.height);
+            }
+        });
+
+        // Reset display values
+        document.getElementById('train-ep').textContent = '0';
+        document.getElementById('train-acc').textContent = '0%';
+        document.getElementById('train-eps').textContent = '0';
+        document.getElementById('train-best').textContent = '0%';
+        document.getElementById('train-last').innerHTML = '';
+        document.getElementById('chart-episodes').textContent = '0';
         document.getElementById('btn-train').classList.add('active');
         document.getElementById('btn-train').textContent = 'Stop';
         document.getElementById('train-overlay').style.display = 'block';
@@ -2313,15 +2332,18 @@ https://github.com/staffman76/HDNA-Workbench
             document.getElementById('stat-neurons').textContent =
                 Object.keys(data.neuron_states).length;
 
-            // Record chart data
-            this.chartData.accuracy.push(acc50);
-            this.chartData.epsilon.push(lastStep.epsilon || 0);
-            if (this.chartData.accuracy.length > this.chartData.maxPoints) {
-                this.chartData.accuracy.shift();
-                this.chartData.epsilon.shift();
+            // Record chart data (skip first 10 episodes — too noisy)
+            const episode = stats.episode || 0;
+            if (episode >= 10) {
+                this.chartData.accuracy.push(acc50);
+                this.chartData.epsilon.push(lastStep.epsilon || 0);
+                if (this.chartData.accuracy.length > this.chartData.maxPoints) {
+                    this.chartData.accuracy.shift();
+                    this.chartData.epsilon.shift();
+                }
+                this.drawChart();
             }
-            document.getElementById('chart-episodes').textContent = stats.episode || 0;
-            this.drawChart();
+            document.getElementById('chart-episodes').textContent = episode;
 
             // Update graphs
             this.updateGraphs(data);
