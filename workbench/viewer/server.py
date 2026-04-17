@@ -1018,68 +1018,9 @@ class LiveTrainer:
         if len(self._recent) > 50:
             self._recent.pop(0)
 
-        # --- Homeostasis: health check and intervention every 50 episodes ---
-        intervention_info = None
+        # Stress monitoring (observation only — no pruning/spawning)
         if self.episode % 50 == 0 and self.episode > 20:
-            from ..core.stress import apply_interventions
-            report = self.monitor.snapshot(self.net, self.episode)
-
-            # Check for dead neurons and fix them
-            dead_count = sum(1 for n in self.net.neurons.values()
-                            if n.is_dead and "output" not in n.tags)
-            total_hidden = sum(1 for n in self.net.neurons.values()
-                              if "output" not in n.tags)
-
-            if dead_count > total_hidden * 0.3:
-                # Too many dead neurons — prune and spawn fresh ones
-                pruned = self.net.prune_dead_neurons()
-                spawned = 0
-                # Spawn replacements in the most depleted layer
-                layer_sizes = self.net.layer_sizes
-                for layer_idx in range(1, self.net.num_layers - 1):
-                    current = layer_sizes.get(layer_idx, 0)
-                    # Spawn up to the original size
-                    needed = max(0, min(len(pruned), 4) - spawned)
-                    for _ in range(needed):
-                        prev_layer = layer_idx - 1
-                        prev_neurons = self.net.get_layer_neurons(prev_layer) if prev_layer > 0 else []
-                        n_in = len(prev_neurons) if prev_neurons else self.net.input_dim
-                        nid = self.net.add_neuron(
-                            n_inputs=n_in, layer=layer_idx,
-                            tags={"hidden", "spawned"}, rng=self.rng
-                        )
-                        # Connect to/from adjacent layers
-                        if prev_neurons:
-                            for pn in prev_neurons:
-                                strength = self.rng.normal(0, np.sqrt(2.0 / n_in))
-                                self.net.connect(pn.neuron_id, nid, float(strength))
-                        next_neurons = self.net.get_layer_neurons(layer_idx + 1)
-                        for nn in next_neurons:
-                            strength = self.rng.normal(0, np.sqrt(2.0 / max(1, current + 1)))
-                            self.net.connect(nid, nn.neuron_id, float(strength))
-                        spawned += 1
-
-                intervention_info = {
-                    "type": "homeostasis",
-                    "pruned": len(pruned),
-                    "spawned": spawned,
-                    "dead_before": dead_count,
-                }
-                self._interventions.append(intervention_info)
-
-            # Adaptive learning rate (only after warm-up: 200+ episodes)
-            if self.brain and len(self._recent) >= 50 and self.episode > 200:
-                acc = sum(self._recent) / len(self._recent)
-                if acc > 0.6:
-                    # Doing well — tighten exploration
-                    self.brain.epsilon = max(0.05, self.brain.epsilon * 0.95)
-
-        # Decay epsilon normally
-        if self.brain and self.episode % 10 == 0:
-            self.brain.epsilon = max(
-                self.brain.epsilon_min,
-                self.brain.epsilon * self.brain.epsilon_decay
-            )
+            self.monitor.snapshot(self.net, self.episode)
 
         # Record in audit log
         from ..core.audit import PredictionRecord
@@ -1103,8 +1044,6 @@ class LiveTrainer:
             "epsilon": round(self.brain.epsilon, 4) if self.brain else 0,
             "lr": round(self.brain.lr, 5) if self.brain else 0,
         }
-        if intervention_info:
-            result_dict["intervention"] = intervention_info
         return result_dict
 
     def stats(self):
