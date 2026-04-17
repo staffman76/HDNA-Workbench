@@ -131,8 +131,8 @@ class HDNAViewer {
         const dy = e.clientY - this.prevMouse.y;
 
         if (this.isRightDrag) {
-            this.panX += dx * 0.01;
-            this.panY -= dy * 0.01;
+            this.panX -= dx * 0.01;
+            this.panY += dy * 0.01;
         } else {
             this.rotY += dx * 0.005;
             this.rotX += dy * 0.005;

@@ -240,7 +240,7 @@ class TaggedMultiHeadAttention(nn.Module):
             "n_heads": self.n_heads,
             "head_dim": self.head_dim,
             "heads": [m.snapshot() for m in self.head_memories],
-            "gate_values": [round(float(g), 4)
+            "gate_values": [round(float(g.detach()), 4)
                             for g in torch.sigmoid(self.head_gates)],
         }
 
