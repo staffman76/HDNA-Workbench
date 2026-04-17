@@ -1156,52 +1156,58 @@ def _make_pattern_daemon(name, num_actions):
     class PD(Daemon):
         def __init__(self):
             super().__init__(name=name, domain="pattern",
-                             description="KNN: stores examples, finds nearest match")
+                             description="KNN: stores examples per class, finds nearest match")
             self.num_actions = num_actions
-            self.examples = []  # [(features, action), ...]
-            self.max_examples = 500  # memory cap per daemon
+            self.per_class = {}  # action -> list of feature vectors
+            self.max_per_class = 200  # examples stored per class
         def reason(self, state, features, rng=None):
             if features is None or len(features) == 0: return None
-            if not self.examples:
+            total_examples = sum(len(v) for v in self.per_class.values())
+            if total_examples == 0:
                 return Proposal(action=int(np.argmax(np.abs(features))) % self.num_actions,
                                confidence=0.3, reasoning="no history", source=self.name)
 
-            # Find k nearest neighbors
-            k = min(5, len(self.examples))
-            dists = []
-            for i, (ex_feat, ex_action) in enumerate(self.examples):
-                d = np.sum((features - ex_feat) ** 2)
-                dists.append((d, ex_action, i))
-            dists.sort(key=lambda x: x[0])
-            top_k = dists[:k]
+            # Find nearest example across all classes
+            best_action = 0
+            best_dist = float('inf')
+            action_best_dists = {}  # action -> best distance to that class
 
-            # Vote among neighbors (weighted by inverse distance)
-            votes = {}
-            for dist, action, _ in top_k:
-                weight = 1.0 / (dist + 1e-8)
-                votes[action] = votes.get(action, 0) + weight
+            for action, examples in self.per_class.items():
+                for ex_feat in examples:
+                    d = float(np.sum((features - ex_feat) ** 2))
+                    if action not in action_best_dists or d < action_best_dists[action]:
+                        action_best_dists[action] = d
+                    if d < best_dist:
+                        best_dist = d
+                        best_action = action
 
-            best_action = max(votes, key=votes.get)
-            total_weight = sum(votes.values())
-            confidence = votes[best_action] / total_weight if total_weight > 0 else 0.5
+            # Confidence: how much closer is the best vs second best class?
+            if len(action_best_dists) >= 2:
+                sorted_dists = sorted(action_best_dists.values())
+                margin = sorted_dists[1] - sorted_dists[0]
+                confidence = min(1.0, max(0.3, margin / (sorted_dists[0] + 1e-8)))
+            else:
+                confidence = 0.5
 
             return Proposal(action=best_action,
-                           confidence=min(1.0, confidence),
-                           reasoning=f"KNN k={k} (conf={confidence:.2f})",
+                           confidence=confidence,
+                           reasoning=f"nearest (d={best_dist:.3f})",
                            source=self.name)
         def learn_from_outcome(self, features, action, correct):
             if not correct: return
-            self.examples.append((features.copy(), action))
-            # Keep memory bounded — remove oldest if over cap
-            if len(self.examples) > self.max_examples:
-                self.examples.pop(0)
+            if action not in self.per_class:
+                self.per_class[action] = []
+            self.per_class[action].append(features.copy())
+            # Keep bounded per class — remove oldest
+            if len(self.per_class[action]) > self.max_per_class:
+                self.per_class[action].pop(0)
         # For daemon reset when switching curricula
         @property
         def action_profiles(self):
             return {}
         @action_profiles.setter
         def action_profiles(self, val):
-            self.examples = []
+            self.per_class = {}
         @property
         def action_counts(self):
             return {}
