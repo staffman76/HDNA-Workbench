@@ -19,6 +19,8 @@ import numpy as np
 _adapter = None          # primary model (HDNA)
 _models = {}             # name -> ModelAdapter (all loaded models)
 _trainer = None          # LiveTrainer instance
+_transformer = None      # InspectableTransformer instance
+_transformer_optimizer = None
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 
 
@@ -61,6 +63,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._list_curricula())
         elif path == "/api/daemons/active":
             self._json_response(self._list_active_daemons())
+        elif path == "/api/transformer":
+            self._json_response(self._get_transformer_info())
         elif path == "/" or path == "/index.html":
             self._serve_file("index.html", "text/html")
         elif path == "/app.js":
@@ -98,6 +102,13 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             self._json_response(self._load_curriculum_file(body))
         elif path == "/api/network/rebuild":
             self._json_response(self._rebuild_network(body))
+        elif path == "/api/transformer/create":
+            self._json_response(self._create_transformer(body))
+        elif path == "/api/transformer/info":
+            self._json_response(self._get_transformer_info())
+        elif path == "/api/transformer/train_step":
+            params = json.loads(body) if body else {}
+            self._json_response(self._transformer_train_step(params))
         elif path == "/api/train/start":
             self._json_response(self._train_start(body))
         elif path == "/api/train/step":
@@ -598,6 +609,175 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             }
         except Exception as e:
             return {"error": str(e)}
+
+    # --- Inspectable Transformer ---
+
+    def _create_transformer(self, body):
+        global _transformer, _transformer_optimizer
+        params = json.loads(body) if body else {}
+
+        try:
+            import torch
+            from ..core.inspectable_transformer import InspectableTransformer
+
+            _transformer = InspectableTransformer(
+                vocab_size=params.get("vocab_size", 1000),
+                d_model=params.get("d_model", 64),
+                n_heads=params.get("n_heads", 4),
+                n_layers=params.get("n_layers", 2),
+                n_experts=params.get("n_experts", 4),
+                d_ff=params.get("d_ff", 128),
+            )
+            _transformer_optimizer = torch.optim.Adam(_transformer.parameters(), lr=0.001)
+
+            # Warm up with a few forward passes so heads start getting tags
+            for _ in range(20):
+                ids = torch.randint(0, _transformer.vocab_size, (1, 16))
+                _transformer(ids)
+
+            snap = _transformer.snapshot()
+            return {
+                "status": "created",
+                "parameters": snap["parameters"],
+                "d_model": snap["d_model"],
+                "n_heads": snap["n_heads"],
+                "n_layers": snap["n_layers"],
+                "n_experts": snap["n_experts"],
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _get_transformer_info(self):
+        if _transformer is None:
+            return {"exists": False}
+
+        snap = _transformer.snapshot()
+        head_report = _transformer.head_report()
+        expert_report = _transformer.expert_report()
+        trace_summary = _transformer.trace_summary()
+
+        # Build 3D graph data for visualization
+        nodes = []
+        edges = []
+        node_id = 0
+
+        for layer_idx, layer in enumerate(snap["layers"]):
+            attn = layer["attention"]
+            experts = layer["experts"]
+
+            # Add head nodes
+            for h, head in enumerate(attn["heads"]):
+                nodes.append({
+                    "id": node_id,
+                    "type": "head",
+                    "layer": layer_idx,
+                    "index": h,
+                    "tag": head["tag"],
+                    "entropy": head["avg_entropy"],
+                    "sharpness": head["avg_sharpness"],
+                    "gate": attn["gate_values"][h],
+                    "is_dead": head["is_dead"],
+                    "label": f"L{layer_idx}H{h}\n{head['tag']}",
+                })
+                node_id += 1
+
+            # Add expert nodes
+            for e, usage in enumerate(experts["usage_pct"]):
+                nodes.append({
+                    "id": node_id,
+                    "type": "expert",
+                    "layer": layer_idx,
+                    "index": e,
+                    "name": experts["expert_names"][e],
+                    "usage_pct": usage,
+                    "label": f"L{layer_idx}E{e}\n{usage:.0f}%",
+                })
+                node_id += 1
+
+        # Edges: connect heads to experts within same layer,
+        # and experts to next layer's heads
+        for n in nodes:
+            if n["type"] == "head":
+                # Connect to experts in same layer
+                for n2 in nodes:
+                    if (n2["type"] == "expert" and n2["layer"] == n["layer"]):
+                        edges.append({
+                            "source": n["id"],
+                            "target": n2["id"],
+                            "strength": n.get("gate", 0.5),
+                        })
+            if n["type"] == "expert":
+                # Connect to heads in next layer
+                for n2 in nodes:
+                    if (n2["type"] == "head" and n2["layer"] == n["layer"] + 1):
+                        edges.append({
+                            "source": n["id"],
+                            "target": n2["id"],
+                            "strength": n.get("usage_pct", 50) / 100,
+                        })
+
+        return {
+            "exists": True,
+            "snapshot": snap,
+            "head_report": head_report,
+            "expert_report": expert_report,
+            "trace_summary": trace_summary,
+            "graph": {"nodes": nodes, "edges": edges},
+        }
+
+    def _transformer_train_step(self, params):
+        global _transformer, _transformer_optimizer
+        if _transformer is None:
+            return {"error": "No transformer. Call /api/transformer/create first."}
+
+        import torch
+
+        steps = params.get("steps", 5)
+        losses = []
+
+        _transformer.train()
+        for _ in range(steps):
+            # Simple next-token prediction training
+            # Generate random sequences and train to predict next token
+            seq_len = 16
+            input_ids = torch.randint(0, _transformer.vocab_size, (4, seq_len))
+            target_ids = torch.randint(0, _transformer.vocab_size, (4, seq_len))
+
+            # For a more interesting task: predict shifted input (autoregressive)
+            full_seq = torch.randint(0, _transformer.vocab_size, (4, seq_len + 1))
+            input_ids = full_seq[:, :-1]
+            target_ids = full_seq[:, 1:]
+
+            logits, trace = _transformer(input_ids)
+            loss = torch.nn.functional.cross_entropy(
+                logits.view(-1, _transformer.vocab_size),
+                target_ids.view(-1)
+            )
+
+            _transformer_optimizer.zero_grad()
+            loss.backward()
+            torch.nn.clip_grad_norm_(_transformer.parameters(), 1.0)
+            _transformer_optimizer.step()
+            losses.append(float(loss.item()))
+
+        _transformer.eval()
+
+        # Get latest trace info
+        with torch.no_grad():
+            test_ids = torch.randint(0, _transformer.vocab_size, (1, 16))
+            _, trace = _transformer(test_ids)
+
+        head_report = _transformer.head_report()
+        trace_summary = _transformer.trace_summary()
+
+        return {
+            "steps": steps,
+            "losses": [round(l, 4) for l in losses],
+            "avg_loss": round(sum(losses) / len(losses), 4),
+            "total_forwards": _transformer.total_forwards,
+            "head_report": head_report,
+            "trace_summary": trace_summary,
+        }
 
     # --- Multi-Model Management ---
 

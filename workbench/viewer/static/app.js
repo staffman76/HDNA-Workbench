@@ -1083,6 +1083,282 @@ class HDNAViewer {
         } catch (err) {}
     }
 
+    // --- Inspectable Transformer ---
+
+    async launchTransformer() {
+        const btn = document.getElementById('btn-transformer');
+
+        if (this._transformerRunning) {
+            this.stopTransformerTraining();
+            return;
+        }
+
+        btn.textContent = 'Creating...';
+        btn.disabled = true;
+
+        try {
+            // Create the transformer
+            const res = await fetch('/api/transformer/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vocab_size: 1000, d_model: 64,
+                    n_heads: 4, n_layers: 2, n_experts: 4, d_ff: 128,
+                }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert('Failed: ' + res.error);
+                btn.textContent = 'Transformer';
+                btn.disabled = false;
+                return;
+            }
+
+            console.log('Transformer created:', res);
+
+            // Load and display the transformer graph
+            await this.showTransformerView();
+
+            // Start training loop
+            this._transformerRunning = true;
+            this._transformerLosses = [];
+            btn.textContent = 'Stop Transformer';
+            btn.classList.add('active');
+            btn.disabled = false;
+            this.transformerTrainLoop();
+
+        } catch (err) {
+            alert('Failed: ' + err);
+            btn.textContent = 'Transformer';
+            btn.disabled = false;
+        }
+    }
+
+    async showTransformerView() {
+        // Fetch transformer graph data
+        const data = await fetch('/api/transformer').then(r => r.json());
+        if (!data.exists) return;
+
+        // Clear current 3D scene
+        this.clearScene();
+
+        const graph = data.graph;
+        const snap = data.snapshot;
+
+        // Update header
+        this.updateHeader(
+            `Inspectable Transformer (${snap.parameters.toLocaleString()} params)`,
+            `${snap.n_heads * snap.n_layers} heads`,
+            `${snap.n_experts * snap.n_layers} experts`,
+            snap.n_layers + ' layers',
+            'transformer'
+        );
+
+        // Build 3D visualization
+        // Heads as spheres, experts as boxes, layered layout
+        const layerSpacing = 3.0;
+        const headSpacing = 1.2;
+        const expertSpacing = 1.2;
+
+        graph.nodes.forEach(node => {
+            const layerX = (node.layer - (snap.n_layers - 1) / 2) * layerSpacing;
+
+            if (node.type === 'head') {
+                const yOffset = (snap.n_heads - 1) / 2;
+                const y = (node.index - yOffset) * headSpacing + 1;
+
+                const size = 0.15 + (node.gate || 0.5) * 0.2;
+                const color = node.is_dead ? 0x444444 : LAYER_COLORS[node.layer] || 0x00d4ff;
+
+                const geometry = new THREE.SphereGeometry(size, 16, 12);
+                const material = new THREE.MeshPhongMaterial({
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: node.is_dead ? 0.05 : 0.3 + (node.sharpness || 0) * 0.5,
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(layerX, y, 0);
+                mesh.userData = { nodeData: node, type: 'head' };
+                this.scene.add(mesh);
+                this.layerMeshes.push(mesh);
+
+                // Label
+                this.addLabel(layerX, y - size - 0.3, 0, node.tag || `H${node.index}`, color);
+
+            } else if (node.type === 'expert') {
+                const yOffset = (snap.n_experts - 1) / 2;
+                const y = (node.index - yOffset) * expertSpacing - 1.5;
+
+                const usage = (node.usage_pct || 25) / 100;
+                const size = 0.1 + usage * 0.25;
+                const color = 0xffab40;
+
+                const geometry = new THREE.BoxGeometry(size, size * 1.2, size);
+                const material = new THREE.MeshPhongMaterial({
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 0.2 + usage * 0.4,
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(layerX, y, 0);
+                mesh.userData = { nodeData: node, type: 'expert' };
+                this.scene.add(mesh);
+                this.layerMeshes.push(mesh);
+
+                // Label
+                this.addLabel(layerX, y - size - 0.3, 0, `E${node.index} ${node.usage_pct?.toFixed(0) || '?'}%`, color);
+            }
+        });
+
+        // Edges
+        graph.edges.forEach(edge => {
+            const srcNode = graph.nodes.find(n => n.id === edge.source);
+            const tgtNode = graph.nodes.find(n => n.id === edge.target);
+            if (!srcNode || !tgtNode) return;
+
+            const srcMesh = this.layerMeshes.find(m =>
+                m.userData.nodeData && m.userData.nodeData.id === edge.source);
+            const tgtMesh = this.layerMeshes.find(m =>
+                m.userData.nodeData && m.userData.nodeData.id === edge.target);
+            if (!srcMesh || !tgtMesh) return;
+
+            const points = [srcMesh.position.clone(), tgtMesh.position.clone()];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: 0x00d4ff,
+                transparent: true,
+                opacity: Math.min(0.6, edge.strength * 0.8),
+            });
+            const line = new THREE.Line(geometry, material);
+            this.scene.add(line);
+            this.edgeLines.push(line);
+        });
+
+        // Layer separators (subtle vertical lines)
+        for (let i = 0; i < snap.n_layers; i++) {
+            const x = (i - (snap.n_layers - 1) / 2) * layerSpacing;
+            this.addLabel(x, 2.5, 0, `Layer ${i}`, 0x556677);
+        }
+        this.addLabel(-(snap.n_layers - 1) / 2 * layerSpacing, 2.0, 0, 'Heads', 0x00d4ff);
+        this.addLabel(-(snap.n_layers - 1) / 2 * layerSpacing, -0.8, 0, 'Experts', 0xffab40);
+
+        // Update neurons tab with head/expert info
+        this.buildTransformerPanel(data);
+        this.resetCamera();
+    }
+
+    addLabel(x, y, z, text, color) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 48;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#' + (color || 0xffffff).toString(16).padStart(6, '0');
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, 128, 28);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.position.set(x, y, z);
+        sprite.scale.set(1.2, 0.3, 1);
+        this.scene.add(sprite);
+        this.layerMeshes.push(sprite);
+    }
+
+    buildTransformerPanel(data) {
+        const container = document.getElementById('neuron-list');
+        const headReport = data.head_report || [];
+        const expertReport = data.expert_report || [];
+
+        let html = '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">Attention Heads</div>';
+
+        headReport.forEach(h => {
+            const tagColor = h.is_dead ? 'var(--red)' :
+                h.tag === 'sharp_selector' ? 'var(--green)' :
+                h.tag === 'local_focus' ? 'var(--accent)' :
+                h.tag === 'position_tracker' ? 'var(--purple)' :
+                h.tag === 'global_mixer' ? 'var(--orange)' :
+                'var(--text-dim)';
+
+            html += `<div class="neuron-row">
+                <span class="nid" style="color:var(--accent)">L${h.layer}H${h.head}</span>
+                <span style="color:${tagColor};font-size:10px;min-width:90px">${h.tag}</span>
+                <span class="activation">${h.avg_entropy.toFixed(2)} ent</span>
+                <span class="status ${h.is_dead ? 'dead' : 'active'}">${h.is_dead ? 'DEAD' : 'OK'}</span>
+            </div>`;
+        });
+
+        html += '<div style="font-size:12px;color:var(--orange);font-weight:600;margin:12px 0 8px">Expert Routing</div>';
+        expertReport.forEach(e => {
+            html += `<div style="margin-bottom:6px">
+                <span style="color:var(--text-dim);font-size:11px">Layer ${e.layer}:</span>`;
+            e.usage_pct.forEach((pct, i) => {
+                const barW = Math.min(60, pct * 0.6);
+                html += ` <span style="font-size:10px;color:var(--orange)">E${i}:${pct.toFixed(0)}%</span>
+                    <span class="act-bar" style="width:${barW}px;background:var(--orange)"></span>`;
+            });
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+    }
+
+    async transformerTrainLoop() {
+        if (!this._transformerRunning) return;
+
+        try {
+            const res = await fetch('/api/transformer/train_step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ steps: 5 }),
+            }).then(r => r.json());
+
+            if (res.error) {
+                console.error('Transformer train error:', res.error);
+                this.stopTransformerTraining();
+                return;
+            }
+
+            // Track losses
+            this._transformerLosses.push(res.avg_loss);
+            if (this._transformerLosses.length > 200) this._transformerLosses.shift();
+
+            // Update the 3D view with new head tags/gate values
+            await this.showTransformerView();
+
+            // Update training stats display
+            document.getElementById('train-ep').textContent = res.total_forwards;
+            document.getElementById('train-acc').textContent = `loss: ${res.avg_loss.toFixed(3)}`;
+            document.getElementById('train-acc').style.color =
+                res.avg_loss < 5 ? 'var(--green)' : res.avg_loss < 6 ? 'var(--orange)' : 'var(--red)';
+            document.getElementById('train-overlay').style.display = 'block';
+            document.getElementById('train-lifetime').textContent =
+                `${res.total_forwards} fwd passes`;
+
+            // Show head specialization
+            const specialized = (res.head_report || []).filter(h => h.tag !== 'balanced' && h.tag !== 'head_' + h.head);
+            document.getElementById('train-level').textContent =
+                `${specialized.length}/${(res.head_report || []).length} heads specialized`;
+
+        } catch (err) {
+            console.error('Transformer train failed:', err);
+        }
+
+        this._transformerInterval = setTimeout(() => this.transformerTrainLoop(), 200);
+    }
+
+    stopTransformerTraining() {
+        this._transformerRunning = false;
+        if (this._transformerInterval) {
+            clearTimeout(this._transformerInterval);
+            this._transformerInterval = null;
+        }
+        const btn = document.getElementById('btn-transformer');
+        btn.textContent = 'Transformer';
+        btn.classList.remove('active');
+    }
+
     // --- Graph Panel ---
 
     switchGraphTab(tabName) {
