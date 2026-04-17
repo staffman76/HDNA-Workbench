@@ -750,8 +750,8 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
             logits, trace = _transformer(input_ids)
             loss = torch.nn.functional.cross_entropy(
-                logits.view(-1, _transformer.vocab_size),
-                target_ids.view(-1)
+                logits.reshape(-1, _transformer.vocab_size),
+                target_ids.reshape(-1)
             )
 
             _transformer_optimizer.zero_grad()
