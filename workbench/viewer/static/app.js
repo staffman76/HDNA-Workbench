@@ -3039,51 +3039,22 @@ https://github.com/staffman76/HDNA-Workbench
         const time = Date.now() * 0.001;
 
         if (!this.isReplaying && !this.isTraining) {
-            // LIVE VIEW: each layer pulses at a different rate
-            // Creates a visual "breathing" effect that shows the network is alive
+            // LIVE VIEW: gentle steady glow, no pulsing
             Object.values(this.neuronMeshes).forEach(m => {
                 if (!m.userData.node.is_dead && m.userData.neuronId !== this.selectedNeuron) {
-                    const layer = m.userData.node.layer || 0;
                     const act = m.userData.node.avg_activation || 0;
-                    // Different frequency per layer — creates a wave effect
-                    const freq = 1.5 + layer * 0.4;
-                    const phase = m.userData.neuronId * 0.5;
-                    const base = 0.15 + act * 0.35;
-                    const pulse = Math.sin(time * freq + phase) * 0.08;
-                    m.material.emissiveIntensity = base + pulse;
-                    // Subtle scale breathing
-                    const scalePulse = 1.0 + Math.sin(time * freq * 0.5 + phase) * 0.03;
-                    m.scale.setScalar(scalePulse);
+                    m.material.emissiveIntensity = 0.15 + act * 0.35;
                 }
             });
         } else if (this.isReplaying) {
-            // REPLAY VIEW: chosen output pulses prominently
+            // REPLAY VIEW: chosen output gently pulses
             Object.values(this.neuronMeshes).forEach(m => {
                 if (m.scale.x > 1.3) {
-                    // Chosen output neuron — strong pulse
-                    m.material.emissiveIntensity = 0.6 + Math.sin(time * 4) * 0.4;
-                }
-            });
-
-            // Animate signal flow along hot edges
-            this.edgeLines.forEach(line => {
-                if (line.material.opacity > 0.3) {
-                    // Hot edge — pulse brightness
-                    const pulse = 0.5 + Math.sin(time * 3 + line.id * 0.3) * 0.3;
-                    line.material.opacity = pulse;
-                }
-            });
-        } else if (this.isTraining) {
-            // TRAINING VIEW: fast activity pulses
-            // updateNetworkLive handles the main visuals
-            // Add subtle edge shimmer during training
-            this.edgeLines.forEach(line => {
-                if (line.material.opacity > 0.05) {
-                    const shimmer = Math.sin(time * 5 + (line.id || 0) * 0.2) * 0.1;
-                    line.material.opacity = Math.max(0.02, line.material.opacity + shimmer);
+                    m.material.emissiveIntensity = 0.5 + Math.sin(time * 1.5) * 0.15;
                 }
             });
         }
+        // Training view: updateNetworkLive handles everything, no extra animation
 
         this.renderer.render(this.scene, this.camera);
     }
