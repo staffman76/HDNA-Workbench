@@ -49,5 +49,17 @@ audit = AuditLog()
 adapter = HDNAAdapter(network=net, brain=brain, coordinator=coordinator,
                       audit=audit, name="HDNA Model")
 
+# Diagnostic: verify daemons are the right type
+print("=== DIAGNOSTIC ===")
+print(f"Network: input_dim={net.input_dim} output_dim={net.output_dim} neurons={len(net.neurons)}")
+print(f"Brain: epsilon={brain.epsilon} lr={brain.lr}")
+print(f"Coordinator: scaffold_floor={coordinator.scaffold_floor}")
+for name, d in coordinator.daemons.items():
+    dtype = type(d).__name__
+    has_per_class = hasattr(d, 'per_class')
+    has_profiles = hasattr(d, 'action_profiles') and isinstance(getattr(d, 'action_profiles', None), dict) and not has_per_class
+    print(f"  Daemon '{name}': type={dtype} KNN={has_per_class} old_profile={has_profiles}")
+print("==================")
+
 print("Launching viewer...")
 launch(adapter)
