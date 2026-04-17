@@ -858,38 +858,23 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
         _transformer.train()
         vocab = _transformer.vocab_size
+
+        # Build vocabulary and corpus on first call
+        if not hasattr(self, '_corpus_data'):
+            self._corpus_data = _build_english_corpus(vocab)
+
+        corpus = self._corpus_data
+
         for _ in range(steps):
-            # Learnable task: repeating patterns and simple sequences
-            # Pattern types:
-            #   1. Repeat: A B C A B C A B -> predict C
-            #   2. Increment: 10 11 12 13 -> predict 14
-            #   3. Copy: tokens repeat after a separator (token 0)
             batch_size = 4
             seq_len = 16
             input_ids = torch.zeros(batch_size, seq_len, dtype=torch.long)
             target_ids = torch.zeros(batch_size, seq_len, dtype=torch.long)
 
             for b in range(batch_size):
-                pattern_type = torch.randint(0, 3, (1,)).item()
-
-                if pattern_type == 0:
-                    # Repeat pattern: ABC ABC ABC...
-                    pat_len = torch.randint(2, 5, (1,)).item()
-                    pattern = torch.randint(1, min(50, vocab), (pat_len,))
-                    seq = pattern.repeat(seq_len // pat_len + 1)[:seq_len + 1]
-                elif pattern_type == 1:
-                    # Increment: start, start+1, start+2, ...
-                    start = torch.randint(1, min(vocab - seq_len - 2, 100), (1,)).item()
-                    seq = torch.arange(start, start + seq_len + 1)
-                else:
-                    # Copy after separator: A B C 0 A B C 0 A...
-                    pat_len = torch.randint(2, 5, (1,)).item()
-                    pattern = torch.randint(1, min(50, vocab), (pat_len,))
-                    chunk = torch.cat([pattern, torch.tensor([0])])
-                    seq = chunk.repeat(seq_len // (pat_len + 1) + 1)[:seq_len + 1]
-
-                input_ids[b] = seq[:seq_len]
-                target_ids[b] = seq[1:seq_len + 1]
+                seq = corpus["generate"](seq_len + 1)
+                input_ids[b] = torch.tensor(seq[:seq_len])
+                target_ids[b] = torch.tensor(seq[1:seq_len + 1])
 
             logits, trace = _transformer(input_ids)
             loss = torch.nn.functional.cross_entropy(
@@ -912,9 +897,21 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         _transformer.eval()
 
         # Get latest trace info
+        _transformer.eval()
+        corpus = self._corpus_data
+        id_to_word = corpus["id_to_word"]
+
+        # Generate a sample prediction to show
         with torch.no_grad():
-            test_ids = torch.randint(0, _transformer.vocab_size, (1, 16))
-            _, trace = _transformer(test_ids)
+            sample_seq = corpus["generate"](12)
+            sample_input = torch.tensor([sample_seq[:8]])
+            logits, trace = _transformer(sample_input)
+            predicted_ids = logits[0].argmax(dim=-1).tolist()
+
+            input_words = [id_to_word.get(t, '?') for t in sample_seq[:8]]
+            target_words = [id_to_word.get(t, '?') for t in sample_seq[1:9]]
+            predicted_words = [id_to_word.get(t, '?') for t in predicted_ids[:8]]
+            correct_tokens = sum(1 for p, t in zip(predicted_ids[:8], sample_seq[1:9]) if p == t)
 
         head_report = _transformer.head_report()
         trace_summary = _transformer.trace_summary()
@@ -929,6 +926,13 @@ class ViewerHandler(SimpleHTTPRequestHandler):
             "total_forwards": _transformer.total_forwards,
             "head_report": head_report,
             "trace_summary": trace_summary,
+            "sample": {
+                "input": " ".join(input_words),
+                "target": " ".join(target_words),
+                "predicted": " ".join(predicted_words),
+                "correct": correct_tokens,
+                "total": 8,
+            },
         }
 
     # --- Multi-Model Management ---
@@ -1433,6 +1437,120 @@ def _serialize(obj):
     if isinstance(obj, set):
         return list(obj)
     return str(obj)
+
+
+def _build_english_corpus(vocab_size):
+    """Build a simple English corpus for transformer training."""
+    import random
+
+    # Word-to-token mapping
+    words = [
+        # 0 = padding/separator
+        "<pad>",     # 0
+        # Days (1-7)
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        # Months (8-19)
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+        # Numbers (20-29)
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        # Colors (30-37)
+        "red", "blue", "green", "yellow", "black", "white", "orange", "purple",
+        # Common nouns (38-57)
+        "cat", "dog", "bird", "fish", "tree", "house", "car", "book", "water", "food",
+        "sun", "moon", "star", "rain", "snow", "fire", "earth", "wind", "light", "dark",
+        # Verbs (58-72)
+        "is", "was", "are", "has", "the", "a", "and", "or", "in", "on",
+        "to", "of", "it", "up", "down",
+        # Adjectives (73-82)
+        "big", "small", "hot", "cold", "fast", "slow", "good", "bad", "new", "old",
+        # Structure (83-92)
+        "what", "who", "where", "when", "how", "yes", "no", "not", "very", "more",
+        # Phrases (93-99)
+        "hello", "goodbye", "please", "thanks", "sorry", "okay", "right",
+    ]
+
+    # Pad to vocab size
+    while len(words) < vocab_size:
+        words.append(f"w{len(words)}")
+
+    word_to_id = {w: i for i, w in enumerate(words)}
+
+    def tokenize(sentence):
+        return [word_to_id.get(w, 0) for w in sentence]
+
+    # Sentence templates (patterns the transformer can learn)
+    templates = [
+        # Day sequences
+        ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        # Month sequences
+        ["january", "february", "march", "april", "may", "june",
+         "july", "august", "september", "october", "november", "december"],
+        # Counting
+        ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"],
+        # Color patterns
+        ["the", "cat", "is", "red"],
+        ["the", "dog", "is", "blue"],
+        ["the", "bird", "is", "green"],
+        ["the", "fish", "is", "yellow"],
+        ["the", "car", "is", "black"],
+        ["the", "house", "is", "white"],
+        # Size patterns
+        ["the", "cat", "is", "big"],
+        ["the", "dog", "is", "small"],
+        ["the", "bird", "is", "fast"],
+        ["the", "fish", "is", "slow"],
+        # Weather
+        ["the", "sun", "is", "hot"],
+        ["the", "moon", "is", "cold"],
+        ["the", "rain", "is", "cold"],
+        ["the", "snow", "is", "white"],
+        ["the", "fire", "is", "hot"],
+        # Opposites
+        ["hot", "and", "cold"],
+        ["big", "and", "small"],
+        ["fast", "and", "slow"],
+        ["good", "and", "bad"],
+        ["new", "and", "old"],
+        ["light", "and", "dark"],
+        ["up", "and", "down"],
+        # Questions
+        ["what", "is", "the", "cat"],
+        ["what", "is", "the", "dog"],
+        ["where", "is", "the", "bird"],
+        ["who", "has", "the", "book"],
+        # Simple facts
+        ["water", "is", "blue"],
+        ["fire", "is", "hot"],
+        ["snow", "is", "cold"],
+        ["the", "sun", "is", "a", "star"],
+        ["the", "moon", "is", "in", "the", "dark"],
+        # Greetings
+        ["hello", "how", "are", "you"],
+        ["goodbye", "and", "thanks"],
+        ["please", "and", "thanks"],
+    ]
+
+    def generate(length):
+        """Generate a token sequence of given length from templates."""
+        seq = []
+        while len(seq) < length:
+            template = random.choice(templates)
+            tokens = tokenize(template)
+            # Sometimes repeat the template
+            if random.random() < 0.3:
+                tokens = tokens + tokens
+            seq.extend(tokens)
+        return seq[:length]
+
+    return {
+        "words": words,
+        "word_to_id": word_to_id,
+        "id_to_word": {i: w for w, i in word_to_id.items()},
+        "templates": templates,
+        "generate": generate,
+        "vocab_size": len(words),
+    }
 
 
 def _make_pattern_daemon(name, num_actions):

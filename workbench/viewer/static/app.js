@@ -1351,6 +1351,18 @@ class HDNAViewer {
             document.getElementById('train-level').textContent =
                 `${specialized.length}/${(res.head_report || []).length} heads specialized`;
 
+            // Show sample prediction with actual English
+            if (res.sample) {
+                const s = res.sample;
+                document.getElementById('train-last').innerHTML =
+                    `<div style="font-size:10px;margin-top:2px">` +
+                    `<div style="color:var(--text-dim)">Input: <span style="color:var(--accent)">${s.input}</span></div>` +
+                    `<div style="color:var(--text-dim)">Expected: <span style="color:var(--text)">${s.target}</span></div>` +
+                    `<div style="color:var(--text-dim)">Predicted: <span style="color:${s.correct > s.total/2 ? 'var(--green)' : 'var(--orange)'}">${s.predicted}</span></div>` +
+                    `<div style="color:var(--text-dim)">${s.correct}/${s.total} tokens correct</div>` +
+                    `</div>`;
+            }
+
             document.getElementById('chart-episodes').textContent = res.total_forwards;
 
             // Push to chart (use accuracy for green line, loss/7 for orange line as proxy)
