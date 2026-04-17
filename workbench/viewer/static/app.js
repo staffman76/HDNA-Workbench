@@ -916,7 +916,7 @@ class HDNAViewer {
 
     // --- Trace stepper ---
 
-    showSelectedDecision(record) {
+    showSelectedDecision(record, replay) {
         const panel = document.getElementById('audit-selected');
         const body = document.getElementById('audit-selected-body');
         if (!panel || !body) return;
@@ -925,66 +925,110 @@ class HDNAViewer {
         const resultColor = record.correct ? 'var(--green)' : 'var(--red)';
         const resultText = record.correct ? 'Correct' : 'Incorrect';
         const confColor = conf > 0.7 ? 'var(--green)' : conf > 0.4 ? 'var(--orange)' : 'var(--red)';
+        const rewColor = (record.reward || 0) > 0 ? 'var(--green)' : 'var(--red)';
 
-        let html = `
+        // Decision summary table
+        let html = `<div style="font-size:10px;color:var(--accent);font-weight:600;margin-bottom:4px">Decision</div>
             <table style="width:100%;font-size:11px;border-collapse:collapse">
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Step</td>
-                    <td style="padding:3px 0;text-align:right;color:var(--accent);font-weight:600">${record.step}</td>
+                    <td style="padding:2px 0;color:var(--text-dim)">Step</td>
+                    <td style="padding:2px 0;text-align:right;color:var(--accent);font-weight:600">${record.step}</td>
                 </tr>
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Result</td>
-                    <td style="padding:3px 0;text-align:right;color:${resultColor};font-weight:600">${resultText}</td>
+                    <td style="padding:2px 0;color:var(--text-dim)">Result</td>
+                    <td style="padding:2px 0;text-align:right;color:${resultColor};font-weight:600">${resultText}</td>
                 </tr>
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Predicted Class</td>
-                    <td style="padding:3px 0;text-align:right">${record.chosen_class}</td>
-                </tr>`;
-
-        if (record.chosen_label) {
-            html += `
-                <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Label</td>
-                    <td style="padding:3px 0;text-align:right">${record.chosen_label}</td>
-                </tr>`;
-        }
-
-        html += `
-                <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Confidence</td>
-                    <td style="padding:3px 0;text-align:right;color:${confColor}">${(conf * 100).toFixed(1)}%</td>
+                    <td style="padding:2px 0;color:var(--text-dim)">Predicted Class</td>
+                    <td style="padding:2px 0;text-align:right">${record.chosen_class}</td>
                 </tr>
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Source</td>
-                    <td style="padding:3px 0;text-align:right">${record.source || '-'}</td>
-                </tr>`;
-
-        if (record.source_reason) {
-            html += `
+                    <td style="padding:2px 0;color:var(--text-dim)">Confidence</td>
+                    <td style="padding:2px 0;text-align:right;color:${confColor}">${(conf * 100).toFixed(1)}%</td>
+                </tr>
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:3px 0;color:var(--text-dim)">Reason</td>
-                    <td style="padding:3px 0;text-align:right">${record.source_reason}</td>
-                </tr>`;
-        }
-
-        if (record.reward !== undefined) {
-            const rewColor = record.reward > 0 ? 'var(--green)' : 'var(--red)';
-            html += `
+                    <td style="padding:2px 0;color:var(--text-dim)">Source</td>
+                    <td style="padding:2px 0;text-align:right">${record.source || '-'}</td>
+                </tr>
                 <tr>
-                    <td style="padding:3px 0;color:var(--text-dim)">Reward</td>
-                    <td style="padding:3px 0;text-align:right;color:${rewColor}">${record.reward}</td>
+                    <td style="padding:2px 0;color:var(--text-dim)">Reward</td>
+                    <td style="padding:2px 0;text-align:right;color:${rewColor}">${record.reward || 0}</td>
+                </tr>
+            </table>`;
+
+        // Neuron activation data from replay
+        if (replay && replay.neuron_activations) {
+            const acts = replay.neuron_activations;
+            const norm = replay.neuron_normalized || {};
+            const hotEdges = replay.hot_edges || [];
+
+            // Sort neurons by activation, show top active ones
+            const sortedNeurons = Object.entries(acts)
+                .map(([id, act]) => ({ id: parseInt(id), activation: act, normalized: norm[parseInt(id)] || 0 }))
+                .filter(n => n.activation > 0.01)
+                .sort((a, b) => b.activation - a.activation);
+
+            html += `<div style="font-size:10px;color:var(--accent);font-weight:600;margin:8px 0 4px">Active Neurons (${sortedNeurons.length})</div>`;
+            html += `<table style="width:100%;font-size:10px;border-collapse:collapse">
+                <tr style="color:var(--text-dim);border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:2px 0">ID</th>
+                    <th style="text-align:right;padding:2px 0">Activation</th>
+                    <th style="text-align:right;padding:2px 0">Strength</th>
+                    <th style="text-align:right;padding:2px 0">Layer</th>
                 </tr>`;
+
+            sortedNeurons.slice(0, 15).forEach(n => {
+                // Find layer from network data
+                let layer = '?';
+                if (this.networkData && this.networkData.nodes) {
+                    const node = this.networkData.nodes.find(nd => nd.id === n.id);
+                    if (node) layer = node.layer;
+                }
+                const barW = Math.min(50, n.normalized * 50);
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.03);cursor:pointer" onclick="app.selectNeuron(${n.id})">
+                    <td style="padding:2px 0;color:var(--accent)">#${n.id}</td>
+                    <td style="padding:2px 0;text-align:right">${n.activation.toFixed(4)}</td>
+                    <td style="padding:2px 0;text-align:right"><span class="act-bar" style="width:${barW}px"></span> ${(n.normalized * 100).toFixed(0)}%</td>
+                    <td style="padding:2px 0;text-align:right;color:var(--text-dim)">L${layer}</td>
+                </tr>`;
+            });
+            if (sortedNeurons.length > 15) {
+                html += `<tr><td colspan="4" style="padding:2px 0;color:var(--text-dim);font-size:9px">...and ${sortedNeurons.length - 15} more</td></tr>`;
+            }
+            html += `</table>`;
+
+            // Hot edges (signal paths)
+            if (hotEdges.length > 0) {
+                html += `<div style="font-size:10px;color:var(--accent);font-weight:600;margin:8px 0 4px">Signal Paths (top ${Math.min(10, hotEdges.length)})</div>`;
+                html += `<table style="width:100%;font-size:10px;border-collapse:collapse">
+                    <tr style="color:var(--text-dim);border-bottom:1px solid var(--border)">
+                        <th style="text-align:left;padding:2px 0">From</th>
+                        <th style="text-align:center;padding:2px 0"></th>
+                        <th style="text-align:left;padding:2px 0">To</th>
+                        <th style="text-align:right;padding:2px 0">Weight</th>
+                        <th style="text-align:right;padding:2px 0">Flow</th>
+                    </tr>`;
+
+                hotEdges.slice(0, 10).forEach(e => {
+                    const flowBar = Math.min(40, e.flow * 500);
+                    const weightColor = e.strength > 0 ? 'var(--text)' : 'var(--red)';
+                    html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                        <td style="padding:2px 0;color:var(--accent)">#${e.source}</td>
+                        <td style="padding:2px 0;text-align:center;color:var(--text-dim)">&rarr;</td>
+                        <td style="padding:2px 0;color:var(--accent)">#${e.target}</td>
+                        <td style="padding:2px 0;text-align:right;color:${weightColor}">${e.strength.toFixed(3)}</td>
+                        <td style="padding:2px 0;text-align:right"><span class="act-bar" style="width:${flowBar}px;background:var(--accent)"></span></td>
+                    </tr>`;
+                });
+                html += `</table>`;
+            }
         }
 
-        html += `</table>`;
-
-        // Highlight which row in the audit list is selected
-        document.querySelectorAll('.audit-row').forEach((row, i) => {
+        // Highlight the selected row in audit list
+        document.querySelectorAll('.audit-row').forEach(row => {
             row.style.background = '';
         });
-        // Find the row for this step
-        const rows = document.querySelectorAll('.audit-row');
-        rows.forEach(row => {
+        document.querySelectorAll('.audit-row').forEach(row => {
             const stepText = row.querySelector('.step');
             if (stepText && stepText.textContent == record.step) {
                 row.style.background = 'rgba(0, 212, 255, 0.1)';
@@ -1061,9 +1105,6 @@ class HDNAViewer {
         stepLabel.textContent = `Step ${record.step} ${correct ? '  OK' : '  X'}`;
         stepLabel.style.color = correct ? 'var(--green)' : 'var(--red)';
 
-        // Update the selected decision card in the Audit tab
-        this.showSelectedDecision(record);
-
         // Fetch replay data with per-neuron activations
         try {
             const replay = await fetch(`/api/replay?step=${record.step}`).then(r => r.json());
@@ -1125,6 +1166,9 @@ class HDNAViewer {
                     this.setEdgeStyle(eg, 0x222233, 0.04);
                 }
             });
+
+            // Update the selected decision card with full neuron data
+            this.showSelectedDecision(record, replay);
 
             // Update neuron detail panel if one is selected
             this.refreshSelectedNeuron(replay);
