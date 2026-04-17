@@ -756,7 +756,7 @@ class ViewerHandler(SimpleHTTPRequestHandler):
 
             _transformer_optimizer.zero_grad()
             loss.backward()
-            torch.nn.clip_grad_norm_(_transformer.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(_transformer.parameters(), 1.0)
             _transformer_optimizer.step()
             losses.append(float(loss.item()))
 
