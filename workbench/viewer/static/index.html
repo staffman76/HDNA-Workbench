@@ -433,6 +433,8 @@ return (max_idx, float(features[max_idx]), "custom logic")</textarea>
         </div>
         <!-- Trace stepper -->
         <div id="trace-stepper">
+            <button id="btn-replay-toggle" onclick="app.toggleReplayMode()" style="min-width:70px">Replay</button>
+            <span style="width:1px;background:var(--border);margin:0 2px"></span>
             <button onclick="app.stepTrace(-10)" title="Back 10">&lt;&lt;</button>
             <button onclick="app.stepTrace(-1)" title="Back 1">&lt;</button>
             <span class="step-display" id="trace-step">Step 0</span>
@@ -440,7 +442,6 @@ return (max_idx, float(features[max_idx]), "custom logic")</textarea>
             <button onclick="app.stepTrace(10)" title="Forward 10">&gt;&gt;</button>
             <input type="range" id="trace-slider" min="0" max="0" value="0"
                    oninput="app.seekTrace(this.value)">
-            <button onclick="app.resetTraceHighlights()" title="Reset view">Reset</button>
         </div>
     </div>
 </div>

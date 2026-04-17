@@ -869,13 +869,49 @@ class HDNAViewer {
 
     // --- Trace stepper ---
 
+    toggleReplayMode() {
+        const btn = document.getElementById('btn-replay-toggle');
+        if (this.isReplaying) {
+            // Exit replay mode — back to live view
+            this.resetTraceHighlights();
+            btn.textContent = 'Replay';
+            btn.classList.remove('active');
+            btn.style.color = 'var(--text)';
+            btn.style.borderColor = 'var(--border)';
+        } else {
+            // Enter replay mode
+            this.isReplaying = true;
+            btn.textContent = 'Live View';
+            btn.classList.add('active');
+            btn.style.color = 'var(--accent)';
+            btn.style.borderColor = 'var(--accent)';
+            this.updateTraceDisplay();
+        }
+    }
+
     stepTrace(delta) {
+        if (!this.isReplaying) {
+            this.isReplaying = true;
+            const btn = document.getElementById('btn-replay-toggle');
+            btn.textContent = 'Live View';
+            btn.classList.add('active');
+            btn.style.color = 'var(--accent)';
+            btn.style.borderColor = 'var(--accent)';
+        }
         this.traceStep = Math.max(0, Math.min(this.maxStep, this.traceStep + delta));
         document.getElementById('trace-slider').value = this.traceStep;
         this.updateTraceDisplay();
     }
 
     seekTrace(step) {
+        if (!this.isReplaying) {
+            this.isReplaying = true;
+            const btn = document.getElementById('btn-replay-toggle');
+            btn.textContent = 'Live View';
+            btn.classList.add('active');
+            btn.style.color = 'var(--accent)';
+            btn.style.borderColor = 'var(--accent)';
+        }
         this.traceStep = parseInt(step);
         document.getElementById('trace-slider').value = this.traceStep;
         this.updateTraceDisplay();
@@ -966,8 +1002,15 @@ class HDNAViewer {
     }
 
     resetTraceHighlights() {
-        // Restore neurons to default appearance
+        // Restore neurons to default appearance — back to live view
         this.isReplaying = false;
+        const btn = document.getElementById('btn-replay-toggle');
+        if (btn) {
+            btn.textContent = 'Replay';
+            btn.classList.remove('active');
+            btn.style.color = 'var(--text)';
+            btn.style.borderColor = 'var(--border)';
+        }
         Object.values(this.neuronMeshes).forEach(m => {
             const node = m.userData.node;
             const color = node.is_dead ? DEAD_COLOR : (LAYER_COLORS[node.layer] || LAYER_COLORS[0]);
