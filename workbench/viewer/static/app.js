@@ -323,40 +323,25 @@ class HDNAViewer {
             const strength = Math.abs(edge.strength);
             const normalizedStrength = strength / maxStrength;
             const color = edge.strength > 0 ? 0x8899aa : 0xcc4444;
-            const dist = src.distanceTo(tgt);
 
-            // Dashed line from source to target
             const points = [src, tgt];
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-            // Random-ish dash sizing for organic look
-            const dashSize = 0.04 + Math.random() * 0.03;
-            const gapSize = 0.03 + Math.random() * 0.02;
-
-            const material = new THREE.LineDashedMaterial({
+            const material = new THREE.LineBasicMaterial({
                 color: color,
                 transparent: true,
-                opacity: this.showEdges ? Math.min(0.5, 0.05 + normalizedStrength * 0.4) : 0,
-                dashSize: dashSize,
-                gapSize: gapSize,
-                linewidth: 1,
+                opacity: this.showEdges ? Math.min(0.4, 0.03 + normalizedStrength * 0.3) : 0,
             });
 
             const line = new THREE.Line(geometry, material);
-            line.computeLineDistances();  // required for dashes to render
             this.scene.add(line);
 
-            const edgeGroup = {
+            this.edgeLines.push({
                 line: line,
                 edge: edge,
-                src: src,
-                tgt: tgt,
                 strength: normalizedStrength,
                 color: color,
-                dashSize: dashSize,
-                gapSize: gapSize,
-            };
-            this.edgeLines.push(edgeGroup);
+                baseOpacity: Math.min(0.4, 0.03 + normalizedStrength * 0.3),
+            });
         });
     }
 
@@ -375,37 +360,8 @@ class HDNAViewer {
     }
 
     animateEdges(time) {
-        if (!this.showEdges) return;
-
-        this.edgeLines.forEach((eg, idx) => {
-            if (!eg.line) return;
-
-            const mat = eg.line.material;
-            const isHot = eg._isHot;
-
-            if (this.isReplaying && isHot) {
-                // HOT EDGE: animate dash offset to simulate flow
-                mat.color.setHex(0x00ffcc);
-                mat.opacity = 0.8;
-                mat.dashSize = 0.06;
-                mat.gapSize = 0.03;
-                // Move the dashes along the line
-                eg.line.material.dashOffset = -time * 0.3;
-                eg.line.computeLineDistances();
-            } else if (this.isReplaying && !isHot) {
-                mat.opacity = 0.03;
-            } else if (this.isTraining) {
-                // Animate flow during training
-                const baseOpacity = Math.min(0.4, 0.05 + eg.strength * 0.3);
-                mat.opacity = baseOpacity;
-                mat.dashOffset = -time * 0.15;
-                eg.line.computeLineDistances();
-            } else {
-                // Live view: static dashes, no animation
-                const baseOpacity = Math.min(0.3, 0.03 + eg.strength * 0.25);
-                mat.opacity = baseOpacity;
-            }
-        });
+        // No animation needed — edges update via setEdgeStyle calls
+        // from training loop, replay, and selection handlers
     }
 
     buildLayerLegend(layerGroups) {
@@ -1068,18 +1024,18 @@ class HDNAViewer {
                 }
             });
 
-            // Light up hot edges
+            // Light up the active path — bright for hot edges, dim everything else
             this.edgeLines.forEach(eg => {
                 if (!eg.edge) return;
                 const e = eg.edge;
                 const key = `${e.source}-${e.target}`;
 
                 if (hotEdgeSet.has(key)) {
-                    this.setEdgeStyle(eg, 0x00ffcc, 0.8);
-                    eg._isHot = true;
+                    // Active path: bright cyan, clearly visible
+                    this.setEdgeStyle(eg, 0x00ffcc, 0.7);
                 } else {
-                    this.setEdgeStyle(eg, 0x1a2a3e, 0.02);
-                    eg._isHot = false;
+                    // Inactive: very dim so the active path stands out
+                    this.setEdgeStyle(eg, 0x222233, 0.04);
                 }
             });
 
@@ -3079,24 +3035,31 @@ https://github.com/staffman76/HDNA-Workbench
             }
         });
 
-        // Update edge strengths based on training
-        if (data.edges) {
-            const edgeMap = {};
-            data.edges.forEach(e => {
-                edgeMap[`${e.source}-${e.target}`] = e.strength;
-            });
+        // Update edges: brighten connections from active neurons
+        const activeNeuronSet = new Set();
+        Object.entries(states).forEach(([nid, state]) => {
+            if (state.normalized > 0.3) activeNeuronSet.add(parseInt(nid));
+        });
 
-            this.edgeLines.forEach(eg => {
-                if (!eg.edge) return;
-                const key = `${eg.edge.source}-${eg.edge.target}`;
-                const newStrength = edgeMap[key];
-                if (newStrength !== undefined) {
-                    eg.edge.strength = newStrength;
-                    eg.strength = Math.abs(newStrength);
-                    eg.color = newStrength > 0 ? 0x8899aa : 0xcc4444;
-                }
-            });
-        }
+        this.edgeLines.forEach(eg => {
+            if (!eg.edge || !eg.line) return;
+            const srcActive = activeNeuronSet.has(eg.edge.source);
+            const tgtActive = activeNeuronSet.has(eg.edge.target);
+
+            if (srcActive && tgtActive) {
+                // Both endpoints active — this edge is carrying signal
+                eg.line.material.color.setHex(0x44aacc);
+                eg.line.material.opacity = 0.5;
+            } else if (srcActive || tgtActive) {
+                // One endpoint active
+                eg.line.material.color.setHex(eg.color);
+                eg.line.material.opacity = eg.baseOpacity * 0.8;
+            } else {
+                // Neither active — dim
+                eg.line.material.color.setHex(eg.color);
+                eg.line.material.opacity = eg.baseOpacity * 0.3;
+            }
+        });
     }
 
     // --- Animation loop ---
