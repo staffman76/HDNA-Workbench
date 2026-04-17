@@ -245,8 +245,10 @@ class HDNAViewer {
             layerGroups[n.layer].push(n);
         });
 
-        const layerSpacing = 2.5;
-        const neuronSpacing = 0.6;
+        // Scale spacing based on largest layer
+        const maxLayerSize = Math.max(...Object.values(layerGroups).map(g => g.length));
+        const layerSpacing = 4.0;
+        const neuronSpacing = Math.min(0.5, 8.0 / Math.max(1, maxLayerSize));
 
         data.nodes.forEach(node => {
             const layer = node.layer;
@@ -260,9 +262,10 @@ class HDNAViewer {
 
             const isOutput = (layer === numLayers - 1);
 
-            // Size: output neurons are larger, dead are smaller
-            const baseSize = isOutput ? 0.18 : 0.12;
-            const actSize = Math.min(0.3, baseSize + node.avg_activation * 0.3);
+            // Size: scale with spacing so neurons don't overlap
+            const sizeScale = Math.min(1.0, neuronSpacing / 0.5);
+            const baseSize = (isOutput ? 0.15 : 0.08) * sizeScale;
+            const actSize = Math.min(0.2 * sizeScale, baseSize + node.avg_activation * 0.15);
             const size = node.is_dead ? baseSize * 0.5 : actSize;
 
             // Color: use layer color, output layer always red/warm
