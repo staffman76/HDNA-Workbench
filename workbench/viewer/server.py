@@ -1155,31 +1155,59 @@ def _make_pattern_daemon(name, num_actions):
     from ..core.daemon import Daemon, Proposal
     class PD(Daemon):
         def __init__(self):
-            super().__init__(name=name, domain="pattern", description="Learns feature-action profiles")
+            super().__init__(name=name, domain="pattern",
+                             description="KNN: stores examples, finds nearest match")
             self.num_actions = num_actions
-            self.action_profiles = {}
-            self.action_counts = {}
+            self.examples = []  # [(features, action), ...]
+            self.max_examples = 500  # memory cap per daemon
         def reason(self, state, features, rng=None):
             if features is None or len(features) == 0: return None
-            if not self.action_profiles:
+            if not self.examples:
                 return Proposal(action=int(np.argmax(np.abs(features))) % self.num_actions,
                                confidence=0.3, reasoning="no history", source=self.name)
-            best_action, best_sim = 0, -1
-            for action, profile in self.action_profiles.items():
-                nf, np_ = np.linalg.norm(features), np.linalg.norm(profile)
-                sim = float(np.dot(features, profile) / (nf * np_ + 1e-8)) if nf > 0 and np_ > 0 else 0
-                if sim > best_sim: best_sim, best_action = sim, action
-            return Proposal(action=best_action, confidence=max(0.1, min(1.0, (best_sim + 1) / 2)),
-                           reasoning=f"profile match (sim={best_sim:.3f})", source=self.name)
+
+            # Find k nearest neighbors
+            k = min(5, len(self.examples))
+            dists = []
+            for i, (ex_feat, ex_action) in enumerate(self.examples):
+                d = np.sum((features - ex_feat) ** 2)
+                dists.append((d, ex_action, i))
+            dists.sort(key=lambda x: x[0])
+            top_k = dists[:k]
+
+            # Vote among neighbors (weighted by inverse distance)
+            votes = {}
+            for dist, action, _ in top_k:
+                weight = 1.0 / (dist + 1e-8)
+                votes[action] = votes.get(action, 0) + weight
+
+            best_action = max(votes, key=votes.get)
+            total_weight = sum(votes.values())
+            confidence = votes[best_action] / total_weight if total_weight > 0 else 0.5
+
+            return Proposal(action=best_action,
+                           confidence=min(1.0, confidence),
+                           reasoning=f"KNN k={k} (conf={confidence:.2f})",
+                           source=self.name)
         def learn_from_outcome(self, features, action, correct):
             if not correct: return
-            if action not in self.action_profiles:
-                self.action_profiles[action] = features.copy()
-                self.action_counts[action] = 1
-            else:
-                c = self.action_counts[action]
-                self.action_profiles[action] = (self.action_profiles[action] * c + features) / (c + 1)
-                self.action_counts[action] = c + 1
+            self.examples.append((features.copy(), action))
+            # Keep memory bounded — remove oldest if over cap
+            if len(self.examples) > self.max_examples:
+                self.examples.pop(0)
+        # For daemon reset when switching curricula
+        @property
+        def action_profiles(self):
+            return {}
+        @action_profiles.setter
+        def action_profiles(self, val):
+            self.examples = []
+        @property
+        def action_counts(self):
+            return {}
+        @action_counts.setter
+        def action_counts(self, val):
+            pass
     return PD()
 
 
