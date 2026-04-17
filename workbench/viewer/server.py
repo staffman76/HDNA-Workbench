@@ -1252,5 +1252,23 @@ def launch(adapter, port=8420, open_browser=True):
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nViewer stopped.")
+        # Auto-save on shutdown
+        try:
+            save_dir = Path(_static_dir).parent / "saves"
+            save_dir.mkdir(exist_ok=True)
+            save_path = save_dir / "model_state.json"
+            data = {
+                "network": _adapter._network.to_dict(),
+                "brain": {
+                    "epsilon": _adapter._brain.epsilon if _adapter._brain else 0.3,
+                    "episodes": _adapter._brain.episodes if _adapter._brain else 0,
+                    "total_reward": _adapter._brain.total_reward if _adapter._brain else 0,
+                    "lr": _adapter._brain.lr if _adapter._brain else 0.01,
+                },
+            }
+            save_path.write_text(json.dumps(data, default=_serialize, indent=2))
+            print(f"\nAuto-saved model to {save_path}")
+        except Exception as e:
+            print(f"\nAuto-save failed: {e}")
+        print("Viewer stopped.")
         server.server_close()
