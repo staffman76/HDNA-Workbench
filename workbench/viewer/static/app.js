@@ -245,10 +245,11 @@ class HDNAViewer {
             layerGroups[n.layer].push(n);
         });
 
-        // Scale spacing based on largest layer
+        // Scale spacing based on largest layer and number of layers
         const maxLayerSize = Math.max(...Object.values(layerGroups).map(g => g.length));
-        const layerSpacing = 4.0;
-        const neuronSpacing = Math.min(0.5, 8.0 / Math.max(1, maxLayerSize));
+        const numLayerGroups = Object.keys(layerGroups).length;
+        const layerSpacing = Math.min(2.5, 8.0 / Math.max(1, numLayerGroups));
+        const neuronSpacing = Math.min(0.5, 6.0 / Math.max(1, maxLayerSize));
 
         data.nodes.forEach(node => {
             const layer = node.layer;
