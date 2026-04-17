@@ -42,10 +42,13 @@ class HDNAViewer {
         this.trainInterval = null;
         this.trainSpeed = 5;
         this.chartData = {
-            accuracy: [],   // rolling accuracy values over time
-            epsilon: [],    // epsilon values over time
-            maxPoints: 200, // max data points to show
+            accuracy: [],       // raw rolling accuracy values
+            smoothed: [],       // smoothed (moving average of rolling avg)
+            epsilon: [],        // epsilon values over time
+            maxPoints: 200,     // max data points to show
             bestAccuracy: 0,
+            allCorrect: 0,      // total correct ever
+            allTotal: 0,        // total episodes ever
         };
 
         // Mouse interaction
@@ -2080,18 +2083,18 @@ https://github.com/staffman76/HDNA-Workbench
         const w = canvas.width;
         const h = canvas.height;
 
-        // Clear
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, w, h);
 
         const accData = this.chartData.accuracy;
+        const smoothData = this.chartData.smoothed;
         const epsData = this.chartData.epsilon;
         if (accData.length < 2) return;
 
         const n = accData.length;
         const xStep = w / (n - 1);
 
-        // Grid lines at 25%, 50%, 75%
+        // Grid lines
         ctx.strokeStyle = '#2a3a5e';
         ctx.lineWidth = 0.5;
         [0.25, 0.50, 0.75].forEach(pct => {
@@ -2105,28 +2108,34 @@ https://github.com/staffman76/HDNA-Workbench
         // Y-axis labels
         ctx.fillStyle = '#556677';
         ctx.font = '8px sans-serif';
+        ctx.textAlign = 'left';
         ctx.fillText('25%', 2, h - 0.25 * h - 2);
         ctx.fillText('50%', 2, h - 0.50 * h - 2);
         ctx.fillText('75%', 2, h - 0.75 * h - 2);
 
-        // Epsilon line (orange, scaled 0-1)
-        ctx.beginPath();
-        ctx.strokeStyle = '#ffab40';
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.5;
-        for (let i = 0; i < n; i++) {
-            const x = i * xStep;
-            const y = h - epsData[i] * h;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+        // Lifetime average line (horizontal, white dashed)
+        const lifetimeAcc = this.chartData.allTotal > 0 ?
+            this.chartData.allCorrect / this.chartData.allTotal : 0;
+        if (lifetimeAcc > 0) {
+            const avgY = h - lifetimeAcc * h;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(0, avgY);
+            ctx.lineTo(w, avgY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '8px sans-serif';
+            ctx.fillText('avg ' + (lifetimeAcc * 100).toFixed(0) + '%', 2, avgY - 3);
         }
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
 
-        // Accuracy line (green)
+        // Raw accuracy (dim green, thin — the "stock market" line)
         ctx.beginPath();
         ctx.strokeStyle = '#00e676';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 0.5;
+        ctx.globalAlpha = 0.3;
         for (let i = 0; i < n; i++) {
             const x = i * xStep;
             const y = h - accData[i] * h;
@@ -2134,21 +2143,36 @@ https://github.com/staffman76/HDNA-Workbench
             else ctx.lineTo(x, y);
         }
         ctx.stroke();
+        ctx.globalAlpha = 1.0;
 
-        // Current accuracy dot
-        const lastAcc = accData[n - 1];
+        // Smoothed accuracy (bright green, thick — the real trend)
+        if (smoothData.length >= 2) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#00e676';
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i < smoothData.length; i++) {
+                const x = i * xStep;
+                const y = h - smoothData[i] * h;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        // Current smoothed value dot
+        const lastSmooth = smoothData.length > 0 ? smoothData[smoothData.length - 1] : accData[n - 1];
         const dotX = (n - 1) * xStep;
-        const dotY = h - lastAcc * h;
+        const dotY = h - lastSmooth * h;
         ctx.beginPath();
-        ctx.fillStyle = lastAcc > 0.5 ? '#00e676' : lastAcc > 0.25 ? '#ffab40' : '#ff5252';
-        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = lastSmooth > 0.7 ? '#00e676' : lastSmooth > 0.4 ? '#ffab40' : '#ff5252';
+        ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Current value text
+        // Current smoothed value label
         ctx.fillStyle = '#e0e0e0';
-        ctx.font = '10px sans-serif';
+        ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText((lastAcc * 100).toFixed(1) + '%', w - 4, dotY - 5);
+        ctx.fillText((lastSmooth * 100).toFixed(0) + '%', w - 4, Math.max(12, dotY - 5));
         ctx.textAlign = 'left';
     }
 
@@ -2196,8 +2220,11 @@ https://github.com/staffman76/HDNA-Workbench
         this.isTraining = true;
         this.isReplaying = false;
         this.chartData.accuracy = [];
+        this.chartData.smoothed = [];
         this.chartData.epsilon = [];
         this.chartData.bestAccuracy = 0;
+        this.chartData.allCorrect = 0;
+        this.chartData.allTotal = 0;
         this.graphHistory = null;
 
         // Clear the chart canvases immediately
@@ -2284,9 +2311,12 @@ https://github.com/staffman76/HDNA-Workbench
             document.getElementById('train-ep').textContent = stats.episode || 0;
 
             const acc50 = stats.accuracy_50 || 0;
+            // Show smoothed accuracy (less noisy than raw rolling)
+            const smoothWindow = this.chartData.smoothed;
+            const displayAcc = smoothWindow.length > 0 ? smoothWindow[smoothWindow.length - 1] : acc50;
             const accEl = document.getElementById('train-acc');
-            accEl.textContent = (acc50 * 100).toFixed(1) + '%';
-            accEl.style.color = acc50 > 0.5 ? 'var(--green)' : acc50 > 0.25 ? 'var(--orange)' : 'var(--red)';
+            accEl.textContent = (displayAcc * 100).toFixed(1) + '%';
+            accEl.style.color = displayAcc > 0.5 ? 'var(--green)' : displayAcc > 0.25 ? 'var(--orange)' : 'var(--red)';
 
             document.getElementById('train-eps').textContent = lastStep.epsilon || 0;
             // Show curriculum's current progression level, not just last task's level
@@ -2321,8 +2351,12 @@ https://github.com/staffman76/HDNA-Workbench
             document.getElementById('train-neurons').textContent =
                 Object.keys(data.neuron_states).length;
 
+            // Lifetime accuracy
+            document.getElementById('train-lifetime').textContent =
+                (lifetimeAcc * 100).toFixed(1) + '%';
+
             // Track best accuracy
-            if (acc50 > this.chartData.bestAccuracy) {
+            if (displayAcc > this.chartData.bestAccuracy) {
                 this.chartData.bestAccuracy = acc50;
             }
             document.getElementById('train-best').textContent =
@@ -2334,12 +2368,29 @@ https://github.com/staffman76/HDNA-Workbench
 
             // Record chart data (skip first 10 episodes — too noisy)
             const episode = stats.episode || 0;
+
+            // Track lifetime totals
+            data.steps.forEach(s => {
+                this.chartData.allTotal++;
+                if (s.correct) this.chartData.allCorrect++;
+            });
+            const lifetimeAcc = this.chartData.allTotal > 0 ?
+                this.chartData.allCorrect / this.chartData.allTotal : 0;
+
             if (episode >= 10) {
                 this.chartData.accuracy.push(acc50);
                 this.chartData.epsilon.push(lastStep.epsilon || 0);
+
+                // Smoothed: moving average of last 10 raw values
+                const raw = this.chartData.accuracy;
+                const window = Math.min(10, raw.length);
+                const smoothed = raw.slice(-window).reduce((a, b) => a + b, 0) / window;
+                this.chartData.smoothed.push(smoothed);
+
                 if (this.chartData.accuracy.length > this.chartData.maxPoints) {
                     this.chartData.accuracy.shift();
                     this.chartData.epsilon.shift();
+                    this.chartData.smoothed.shift();
                 }
                 this.drawChart();
             }

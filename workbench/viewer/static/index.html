@@ -56,7 +56,8 @@
             <div style="display:flex;gap:16px">
                 <div>
                     <div>Episode: <span id="train-ep" style="color:var(--accent)">0</span></div>
-                    <div>Accuracy (50): <span id="train-acc" style="color:var(--green)">0%</span></div>
+                    <div>Accuracy: <span id="train-acc" style="color:var(--green)">0%</span></div>
+                    <div>Lifetime: <span id="train-lifetime" style="color:var(--text-dim)">0%</span></div>
                     <div>Epsilon: <span id="train-eps" style="color:var(--orange)">0</span></div>
                     <div>Level: <span id="train-level" style="color:var(--text-dim)">-</span></div>
                 </div>
@@ -69,8 +70,9 @@
             <canvas id="accuracy-chart" width="260" height="80" style="margin-top:6px;border:1px solid var(--border);border-radius:3px;background:var(--bg-dark)"></canvas>
             <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:2px">
                 <span>0</span>
-                <span style="color:var(--green)">--- accuracy</span>
-                <span style="color:var(--orange)">--- epsilon</span>
+                <span style="color:var(--green)">-- trend</span>
+                <span style="color:rgba(0,230,118,0.3)">-- raw</span>
+                <span style="color:#fff">-- avg</span>
                 <span id="chart-episodes">0</span>
             </div>
             <div id="train-last" style="margin-top:4px;font-size:11px;color:var(--text-dim)"></div>
