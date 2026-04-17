@@ -307,16 +307,11 @@ class HDNAViewer {
     buildEdges(edges) {
         if (!edges) return;
 
-        // Only show the strongest edges to avoid visual clutter
-        // Sort by absolute strength, take top N
+        // Only show the strongest edges
         const sortedEdges = [...edges].sort((a, b) => Math.abs(b.strength) - Math.abs(a.strength));
         const maxEdges = Math.min(sortedEdges.length, 80);
         const topEdges = sortedEdges.slice(0, maxEdges);
-
-        // Find the max strength for normalization
         const maxStrength = topEdges.length > 0 ? Math.abs(topEdges[0].strength) : 1;
-
-        const dotGeo = new THREE.SphereGeometry(0.025, 4, 4);
 
         topEdges.forEach(edge => {
             const srcMesh = this.neuronMeshes[edge.source];
@@ -328,101 +323,87 @@ class HDNAViewer {
             const strength = Math.abs(edge.strength);
             const normalizedStrength = strength / maxStrength;
             const color = edge.strength > 0 ? 0x8899aa : 0xcc4444;
-
-            // Number of dots based on distance
             const dist = src.distanceTo(tgt);
-            const numDots = Math.max(3, Math.min(8, Math.floor(dist / 0.3)));
 
-            const dots = [];
-            for (let i = 0; i < numDots; i++) {
-                const t = (i + 0.5) / numDots;
-                const pos = new THREE.Vector3().lerpVectors(src, tgt, t);
+            // Dashed line from source to target
+            const points = [src, tgt];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-                const mat = new THREE.MeshBasicMaterial({
-                    color: color,
-                    transparent: true,
-                    opacity: this.showEdges ? Math.min(0.5, 0.05 + normalizedStrength * 0.4) : 0,
-                });
-                const dot = new THREE.Mesh(dotGeo, mat);
-                dot.position.copy(pos);
-                this.scene.add(dot);
-                dots.push(dot);
-            }
+            // Random-ish dash sizing for organic look
+            const dashSize = 0.04 + Math.random() * 0.03;
+            const gapSize = 0.03 + Math.random() * 0.02;
+
+            const material = new THREE.LineDashedMaterial({
+                color: color,
+                transparent: true,
+                opacity: this.showEdges ? Math.min(0.5, 0.05 + normalizedStrength * 0.4) : 0,
+                dashSize: dashSize,
+                gapSize: gapSize,
+                linewidth: 1,
+            });
+
+            const line = new THREE.Line(geometry, material);
+            line.computeLineDistances();  // required for dashes to render
+            this.scene.add(line);
 
             const edgeGroup = {
-                dots: dots,
+                line: line,
                 edge: edge,
                 src: src,
                 tgt: tgt,
                 strength: normalizedStrength,
                 color: color,
+                dashSize: dashSize,
+                gapSize: gapSize,
             };
             this.edgeLines.push(edgeGroup);
         });
     }
 
-    // Helper: set edge visibility/color across dot trains
+    // Helper: set edge visibility/color
     setEdgeStyle(edgeGroup, color, opacity) {
-        if (!edgeGroup.dots) return;
-        edgeGroup.dots.forEach(dot => {
-            if (color !== undefined) dot.material.color.setHex(color);
-            dot.material.opacity = opacity;
-        });
+        if (!edgeGroup.line) return;
+        if (color !== undefined) edgeGroup.line.material.color.setHex(color);
+        edgeGroup.line.material.opacity = opacity;
     }
 
     setAllEdgesVisible(visible) {
         this.edgeLines.forEach(eg => {
-            if (!eg.dots) return;
-            const opacity = visible ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0;
-            eg.dots.forEach(dot => { dot.material.opacity = opacity; });
+            if (!eg.line) return;
+            eg.line.material.opacity = visible ? Math.min(0.5, 0.05 + eg.strength * 0.3) : 0;
         });
     }
 
     animateEdges(time) {
         if (!this.showEdges) return;
 
-        this.edgeLines.forEach((edgeGroup, idx) => {
-            if (!edgeGroup.dots) return;
+        this.edgeLines.forEach((eg, idx) => {
+            if (!eg.line) return;
 
-            const dots = edgeGroup.dots;
-            const numDots = dots.length;
-            const strength = edgeGroup.strength;
-            const isHot = edgeGroup._isHot;
+            const mat = eg.line.material;
+            const isHot = eg._isHot;
 
             if (this.isReplaying && isHot) {
-                // HOT EDGE in replay: fast traveling pulse (cyan)
-                const phase = (time * 3 + idx * 0.15) % 1.0;
-                const brightDot = Math.floor(phase * numDots);
-                dots.forEach((dot, i) => {
-                    dot.material.color.setHex(0x00ffcc);
-                    const dist = Math.abs(i - brightDot);
-                    dot.material.opacity = dist === 0 ? 0.9 : dist === 1 ? 0.4 : 0.15;
-                    dot.scale.setScalar(dist === 0 ? 2.0 : 1.0);
-                });
+                // HOT EDGE: animate dash offset to simulate flow
+                mat.color.setHex(0x00ffcc);
+                mat.opacity = 0.8;
+                mat.dashSize = 0.06;
+                mat.gapSize = 0.03;
+                // Move the dashes along the line
+                eg.line.material.dashOffset = -time * 0.3;
+                eg.line.computeLineDistances();
             } else if (this.isReplaying && !isHot) {
-                // COLD EDGE in replay: nearly invisible
-                dots.forEach(dot => {
-                    dot.material.opacity = 0.02;
-                    dot.scale.setScalar(0.5);
-                });
+                mat.opacity = 0.03;
             } else if (this.isTraining) {
-                // TRAINING: gentle pulse proportional to strength
-                const baseOpacity = Math.min(0.4, 0.03 + strength * 0.3);
-                const phase = (time * 1.5 + idx * 0.1) % 1.0;
-                const brightDot = Math.floor(phase * numDots);
-                dots.forEach((dot, i) => {
-                    dot.material.opacity = (i === brightDot) ? baseOpacity + 0.15 : baseOpacity * 0.6;
-                    dot.scale.setScalar((i === brightDot) ? 1.3 : 1.0);
-                });
+                // Animate flow during training
+                const baseOpacity = Math.min(0.4, 0.05 + eg.strength * 0.3);
+                mat.opacity = baseOpacity;
+                mat.dashOffset = -time * 0.15;
+                eg.line.computeLineDistances();
             } else {
-                // LIVE VIEW: slow gentle pulse, just enough to show they're there
-                const baseOpacity = Math.min(0.3, 0.03 + strength * 0.25);
-                const phase = (time * 0.5 + idx * 0.08) % 1.0;
-                const brightDot = Math.floor(phase * numDots);
-                dots.forEach((dot, i) => {
-                    dot.material.opacity = (i === brightDot) ? baseOpacity + 0.1 : baseOpacity * 0.5;
-                    dot.scale.setScalar(1.0);
-                });
+                // Live view: static dashes, no animation
+                const baseOpacity = Math.min(0.3, 0.03 + eg.strength * 0.25);
+                mat.opacity = baseOpacity;
             }
         });
     }
@@ -606,13 +587,10 @@ class HDNAViewer {
         Object.values(this.neuronMeshes).forEach(m => this.scene.remove(m));
         this.neuronMeshes = {};
 
-        // Remove all edges (dot trains)
+        // Remove all edges
         this.edgeLines.forEach(eg => {
-            if (eg.dots) {
-                eg.dots.forEach(d => this.scene.remove(d));
-            } else {
-                this.scene.remove(eg);
-            }
+            if (eg.line) this.scene.remove(eg.line);
+            if (eg.dots) eg.dots.forEach(d => this.scene.remove(d));
         });
         this.edgeLines = [];
 
@@ -3116,8 +3094,6 @@ https://github.com/staffman76/HDNA-Workbench
                     eg.edge.strength = newStrength;
                     eg.strength = Math.abs(newStrength);
                     eg.color = newStrength > 0 ? 0x8899aa : 0xcc4444;
-                    const opacity = this.showEdges ? Math.min(0.6, 0.05 + eg.strength * 0.5) : 0;
-                    this.setEdgeStyle(eg, eg.color, opacity);
                 }
             });
         }
