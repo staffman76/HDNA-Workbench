@@ -1351,6 +1351,28 @@ class HDNAViewer {
             document.getElementById('train-level').textContent =
                 `${specialized.length}/${(res.head_report || []).length} heads specialized`;
 
+            document.getElementById('chart-episodes').textContent = res.total_forwards;
+
+            // Push to chart (use accuracy for green line, loss/7 for orange line as proxy)
+            this.chartData.accuracy.push(acc);
+            this.chartData.epsilon.push(Math.min(1, res.avg_loss / 7));  // normalize loss to 0-1
+
+            const raw = this.chartData.accuracy;
+            const smoothWin = Math.min(10, raw.length);
+            const smoothed = raw.slice(-smoothWin).reduce((a, b) => a + b, 0) / smoothWin;
+            this.chartData.smoothed.push(smoothed);
+
+            // Track lifetime
+            this.chartData.allTotal += 5;
+            this.chartData.allCorrect += Math.round(acc * 5 * 16);  // approx
+
+            if (this.chartData.accuracy.length > this.chartData.maxPoints) {
+                this.chartData.accuracy.shift();
+                this.chartData.epsilon.shift();
+                this.chartData.smoothed.shift();
+            }
+            this.drawChart();
+
         } catch (err) {
             console.error('Transformer train failed:', err);
         }
