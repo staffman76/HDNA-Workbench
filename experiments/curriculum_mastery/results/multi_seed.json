@@ -10,7 +10,9 @@
     "P3_prereq_gating": 3,
     "P4_review_fraction_in_range": 3,
     "P5_forgetting_detected": 3,
-    "P6_forgetting_events_not_duplicated": 3
+    "P6_forgetting_events_not_duplicated": 3,
+    "P7_chain_pass_cascades_on_l0_regression": 3,
+    "P8_progress_chain_zero_local_holds": 3
   },
   "review_fraction_summary": {
     "values": [
@@ -78,7 +80,30 @@
           "prerequisites": []
         },
         "P6_forgetting_events_not_duplicated": true,
-        "P6_forgetting_events_logged": 1
+        "P6_forgetting_events_logged": 1,
+        "P7_chain_pass_cascades_on_l0_regression": true,
+        "P7_chain_pass_map": {
+          "0": false,
+          "1": false,
+          "2": false,
+          "3": false
+        },
+        "P7_local_pass_map": {
+          "0": false,
+          "1": true,
+          "2": true,
+          "3": false
+        },
+        "P8_progress_chain_zero_local_holds": true,
+        "P8_progress_snapshot": {
+          "name": "toy_math",
+          "total_levels": 4,
+          "mastered": 0,
+          "mastered_local": 2,
+          "progress_pct": 0.0,
+          "current_level": "add_small",
+          "forgetting_events": 1
+        }
       },
       "phase1_rungs_seen": {
         "0": [
@@ -169,7 +194,30 @@
           "prerequisites": []
         },
         "P6_forgetting_events_not_duplicated": true,
-        "P6_forgetting_events_logged": 1
+        "P6_forgetting_events_logged": 1,
+        "P7_chain_pass_cascades_on_l0_regression": true,
+        "P7_chain_pass_map": {
+          "0": false,
+          "1": false,
+          "2": false,
+          "3": false
+        },
+        "P7_local_pass_map": {
+          "0": false,
+          "1": true,
+          "2": true,
+          "3": false
+        },
+        "P8_progress_chain_zero_local_holds": true,
+        "P8_progress_snapshot": {
+          "name": "toy_math",
+          "total_levels": 4,
+          "mastered": 0,
+          "mastered_local": 2,
+          "progress_pct": 0.0,
+          "current_level": "add_small",
+          "forgetting_events": 1
+        }
       },
       "phase1_rungs_seen": {
         "0": [
@@ -258,7 +306,30 @@
           "prerequisites": []
         },
         "P6_forgetting_events_not_duplicated": true,
-        "P6_forgetting_events_logged": 1
+        "P6_forgetting_events_logged": 1,
+        "P7_chain_pass_cascades_on_l0_regression": true,
+        "P7_chain_pass_map": {
+          "0": false,
+          "1": false,
+          "2": false,
+          "3": false
+        },
+        "P7_local_pass_map": {
+          "0": false,
+          "1": true,
+          "2": true,
+          "3": false
+        },
+        "P8_progress_chain_zero_local_holds": true,
+        "P8_progress_snapshot": {
+          "name": "toy_math",
+          "total_levels": 4,
+          "mastered": 0,
+          "mastered_local": 2,
+          "progress_pct": 0.0,
+          "current_level": "add_small",
+          "forgetting_events": 1
+        }
       },
       "phase1_rungs_seen": {
         "0": [

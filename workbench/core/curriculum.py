@@ -170,6 +170,42 @@ class Curriculum:
         """Add a level to the curriculum."""
         self.levels.append(level)
 
+    def is_chain_passed(self, level_id: int) -> bool:
+        """
+        Chain-aware pass check: the level AND every prereq (recursively)
+        must currently satisfy `Level.is_passed()`.
+
+        This is the stricter semantic — a level that personally still shows
+        high recent_accuracy but whose prereq foundation has regressed is
+        NOT chain-passed. Useful for progress accounting and any consumer
+        that wants "earned and can still sustain" semantics.
+
+        `Level.is_passed()` (local) is the cheap own-accuracy check.
+        `Curriculum.is_chain_passed()` adds the recursive prereq walk.
+        """
+        by_id = {l.level_id: l for l in self.levels}
+        visiting: set[int] = set()
+
+        def recurse(lid: int) -> bool:
+            if lid not in by_id:
+                return False
+            if lid in visiting:
+                # Cycle guard — treat as not-passed to avoid infinite loop.
+                return False
+            visiting.add(lid)
+            level = by_id[lid]
+            if not level.is_passed():
+                visiting.discard(lid)
+                return False
+            for pid in level.prerequisites:
+                if not recurse(pid):
+                    visiting.discard(lid)
+                    return False
+            visiting.discard(lid)
+            return True
+
+        return recurse(level_id)
+
     def get_current_level(self) -> Optional[Level]:
         """Get the next unmastered level whose prerequisites are met."""
         mastered_ids = {l.level_id for l in self.levels if l.is_passed()}
@@ -257,11 +293,18 @@ class Curriculum:
     def progress(self) -> dict:
         """Overall curriculum progress."""
         total = len(self.levels)
-        mastered = sum(1 for l in self.levels if l.is_passed())
+        # Chain-aware count: a level only counts as mastered if it AND all
+        # its prereqs currently satisfy is_passed(). This avoids over-
+        # reporting progress when a prereq has regressed.
+        mastered = sum(1 for l in self.levels
+                       if self.is_chain_passed(l.level_id))
+        # Local count for consumers who want the non-cascading view.
+        mastered_local = sum(1 for l in self.levels if l.is_passed())
         return {
             "name": self.name,
             "total_levels": total,
             "mastered": mastered,
+            "mastered_local": mastered_local,
             "progress_pct": round(mastered / total * 100, 1) if total > 0 else 0,
             "current_level": self.get_current_level().name if self.get_current_level() else "COMPLETE",
             "forgetting_events": len(self._forgetting_events),

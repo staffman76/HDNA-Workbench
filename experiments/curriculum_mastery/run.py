@@ -51,6 +51,11 @@ P5  In Phase 3, check_forgetting() returns a non-empty list that
     includes Level 0 by the end of N_FORGET attempts.
 P6  _forgetting_events length equals the number of *distinct*
     forgetting episodes (we run exactly 1 episode in this test).
+P7  After phase 3 regresses L0, `Curriculum.is_chain_passed` returns
+    False for L0, L1, L2 (chain break via L0's failure) even though L1
+    and L2 themselves still have high own `recent_accuracy`.
+P8  `progress["mastered"]` (chain-aware) == 0 after phase 3 regression;
+    `progress["mastered_local"]` >= 2 (L1, L2 still locally passed).
 """
 
 from __future__ import annotations
@@ -262,7 +267,21 @@ def phase3_forgetting(curriculum: Curriculum, rng: np.random.Generator,
 # Evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate_predictions(phase1: dict, phase2: dict, phase3: dict) -> dict:
+def phase4_chain_regression(curriculum: Curriculum) -> dict:
+    """After L0 regressed in phase 3, inspect the chain-aware pass check."""
+    chain_pass = {l.level_id: curriculum.is_chain_passed(l.level_id)
+                  for l in curriculum.levels}
+    local_pass = {l.level_id: l.is_passed() for l in curriculum.levels}
+    progress = curriculum.progress
+    return {
+        "chain_pass": chain_pass,
+        "local_pass": local_pass,
+        "progress": progress,
+    }
+
+
+def evaluate_predictions(phase1: dict, phase2: dict, phase3: dict,
+                         phase4: dict) -> dict:
     # P1 — mastery ladder: did any level hit all four rungs?
     rungs = phase1["rungs_seen"]
     ladder_hits = {lid: all(r in seen for r in
@@ -322,6 +341,16 @@ def evaluate_predictions(phase1: dict, phase2: dict, phase3: dict) -> dict:
         "P5_target_final_snapshot": phase3["final_target_snapshot"],
         "P6_forgetting_events_not_duplicated": p6_pass,
         "P6_forgetting_events_logged": p6_events,
+        "P7_chain_pass_cascades_on_l0_regression": (
+            phase4["chain_pass"].get(0) is False
+            and phase4["chain_pass"].get(1) is False
+            and phase4["chain_pass"].get(2) is False),
+        "P7_chain_pass_map": phase4["chain_pass"],
+        "P7_local_pass_map": phase4["local_pass"],
+        "P8_progress_chain_zero_local_holds": (
+            phase4["progress"]["mastered"] == 0
+            and phase4["progress"].get("mastered_local", 0) >= 2),
+        "P8_progress_snapshot": phase4["progress"],
     }
 
 
@@ -393,7 +422,8 @@ def run_experiment(seed: int) -> dict:
     phase1 = phase1_mastery_ramp(curriculum, rng)
     phase2 = phase2_review_mix(curriculum, rng, N_REVIEW)
     phase3 = phase3_forgetting(curriculum, rng, N_FORGET, FORGET_CHECK_EVERY)
-    verdict = evaluate_predictions(phase1, phase2, phase3)
+    phase4 = phase4_chain_regression(curriculum)
+    verdict = evaluate_predictions(phase1, phase2, phase3, phase4)
 
     return {
         "config": {"seed": seed, "n_review": N_REVIEW, "n_forget": N_FORGET,
@@ -402,6 +432,7 @@ def run_experiment(seed: int) -> dict:
         "phase1": phase1,
         "phase2": phase2,
         "phase3": phase3,
+        "phase4": phase4,
         "verdict": verdict,
     }
 
