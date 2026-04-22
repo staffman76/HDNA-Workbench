@@ -34,7 +34,7 @@
     {
       "layer": 0,
       "head": 0,
-      "tag": "global_mixer",
+      "tag": "sharp_selector",
       "avg_entropy": 1.2837,
       "avg_sharpness": 0.6114,
       "gate_value": 0.9113,
@@ -67,7 +67,7 @@
     {
       "layer": 0,
       "head": 1,
-      "tag": "global_mixer",
+      "tag": "sharp_selector",
       "avg_entropy": 1.5388,
       "avg_sharpness": 0.5398,
       "gate_value": 0.9067,
@@ -100,7 +100,7 @@
     {
       "layer": 0,
       "head": 2,
-      "tag": "global_mixer",
+      "tag": "sharp_selector",
       "avg_entropy": 1.6246,
       "avg_sharpness": 0.5141,
       "gate_value": 0.9054,
@@ -133,7 +133,7 @@
     {
       "layer": 0,
       "head": 3,
-      "tag": "global_mixer",
+      "tag": "balanced",
       "avg_entropy": 1.6955,
       "avg_sharpness": 0.4934,
       "gate_value": 0.9042,
@@ -166,7 +166,7 @@
     {
       "layer": 1,
       "head": 0,
-      "tag": "global_mixer",
+      "tag": "position_tracker",
       "avg_entropy": 1.389,
       "avg_sharpness": 0.5914,
       "gate_value": 0.8911,
@@ -199,7 +199,7 @@
     {
       "layer": 1,
       "head": 1,
-      "tag": "balanced",
+      "tag": "position_tracker",
       "avg_entropy": 1.5798,
       "avg_sharpness": 0.5403,
       "gate_value": 0.8922,
@@ -232,7 +232,7 @@
     {
       "layer": 1,
       "head": 2,
-      "tag": "balanced",
+      "tag": "position_tracker",
       "avg_entropy": 1.787,
       "avg_sharpness": 0.4697,
       "gate_value": 0.8925,

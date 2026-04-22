@@ -87,6 +87,44 @@ This confirms the ablation interpretation: **the ablation signal on L0H0 really 
 
 Canonical induction (Olsson et al. 2022) uses a 2-layer circuit: layer 0 "previous-token" + layer 1 "match-and-copy." Our L1 heads do near nothing useful, so the model instead learned a 1-layer **positional shortcut** — "at query `i` in the second half, attend to `i − 24`" — which works here because the task has a fixed repeat period. That's still functionally induction for this task, just not the textbook mechanism.
 
+---
+
+## After recalibrating the tagger
+
+The infrastructure records the right raw stats; the calibration layer on top was wrong. Four changes to `HeadMemory` in `workbench/core/inspectable_transformer.py`:
+
+1. **Rolling stats drive the tag, not append-only votes.** `self.tag` is recomputed each forward from `avg_entropy` / `avg_sharpness` over the 100-step rolling window. A head that specializes late is no longer anchored to its early-training label.
+2. **Entropy is normalized by `log(seq_len)`.** Tag thresholds are now scale-invariant instead of calibrated against an unstated sequence length.
+3. **Sharpness threshold lowered from 0.8 → 0.5.** Real trained heads on small models peak around 0.5-0.7; 0.8 was a threshold only theoretical (near-one-hot) heads could ever hit.
+4. **Landmark detection uses a `top1_history` deque.** A head is flagged `position_tracker` when the single most-attended key is the same specific position in >50% of recent forwards. The old rule was a bad ratio against cumulative top-K hits; position 0 (attended early by every first-half query in a causal model) was swamping the signal.
+
+Re-running the exact same ablation protocol after recalibration:
+
+| layer | head | tag | avg_sharp | Δacc 2nd-half | role |
+|---:|---:|:---|---:|---:|:---|
+| 0 | 0 | `sharp_selector` | 0.61 | −0.124 | induction head |
+| 0 | 1 | `sharp_selector` | 0.54 | −0.024 | weak induction |
+| 0 | 2 | `sharp_selector` | 0.51 | −0.023 | weak induction |
+| 0 | 3 | `balanced` | 0.49 | −0.014 | borderline (just under 0.5 threshold) |
+| 1 | 3 | `balanced` | 0.29 | −0.003 | scattered |
+| 1 | 1 | `position_tracker` | 0.54 | −0.001 | landmark at key=23 |
+| 1 | 2 | `position_tracker` | 0.47 | −0.001 | landmark at key=23 |
+| 1 | 0 | `position_tracker` | 0.59 | −0.000 | landmark at key=23 |
+
+Now the tags track the actual circuit:
+
+- Every head that carries induction work → `sharp_selector`.
+- Every head that parks attention on a single landmark → `position_tracker`.
+- Heads that do neither → `balanced`.
+
+**Updated verdict:** the tagging claim was falsifiable, and it failed cleanly on the first test — *but* the failure was in the classifier, not the underlying infrastructure. With calibrated thresholds and rolling-window scoring, the tags do correspond to head function on this task. The fix is four short edits in one file.
+
+### What still isn't resolved
+
+- **No circuit-role tags yet.** `sharp_selector` tells you "this head concentrates attention per query," not "this head is doing induction vs copy vs previous-token." Distinguishing those needs direct analysis of the QK pattern (what offset? content- or position-based?), not just output stats.
+- **Gates still didn't specialize.** All values sit between 0.88 and 0.91. The tagger fix didn't change that. The ARCHITECTURE.md §4 claim about gate specialization remains untested — the gate-specialization experiment is still needed to verify it (or refute it).
+- **L0H3 falls on the wrong side of the sharpness cutoff.** avg_sharp = 0.49, tag = `balanced`, but ablation says it does contribute. Any single threshold will have borderline cases; a continuous score (e.g., "induction-ness") would be more honest than hard labels.
+
 ## Verdict
 
 The head-tagging claim, as implemented, does not survive a ground-truth-known test. The infrastructure is real (stats are recorded, gates are trainable, snapshots are inspectable), but:

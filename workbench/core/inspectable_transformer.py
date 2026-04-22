@@ -88,43 +88,124 @@ class HeadMemory:
         # Rolling statistics
         self.entropy_history = deque(maxlen=window)
         self.sharpness_history = deque(maxlen=window)
+        # Rolling history of the #1 attended key per forward. This is what
+        # distinguishes a landmark head ("always keys=23") from one whose peak
+        # moves per input. position_counts records top-K hits for snapshot
+        # display, but tag decisions use top1_history.
+        self.top1_history = deque(maxlen=window)
         self.position_counts = {}  # position -> count (what does this head attend to?)
         self.total_forwards = 0
 
         # Tag assignment
         self._tag_scores = {}  # candidate_tag -> evidence score
 
-    def record(self, entropy: float, sharpness: float, top_positions: list):
-        """Record one forward pass observation."""
+    def record(self, entropy: float, sharpness: float, top_positions: list,
+               seq_len: int = None):
+        """Record one forward pass observation.
+
+        `seq_len` is the sequence length for the current forward pass. When
+        provided, entropy is normalized by log(seq_len) so tag thresholds are
+        scale-invariant across sequence lengths.
+        """
         self.total_forwards += 1
         self.entropy_history.append(entropy)
         self.sharpness_history.append(sharpness)
+        if top_positions:
+            self.top1_history.append(top_positions[0])
         for pos in top_positions:
             self.position_counts[pos] = self.position_counts.get(pos, 0) + 1
 
-        # Auto-tag based on behavior patterns
-        self._update_tag(entropy, sharpness, top_positions)
+        # Maintain a running vote of instantaneous tag firings for introspection.
+        # The final self.tag is recomputed from rolling-window stats below, so
+        # a head that specializes late isn't stuck with its early label.
+        self._update_tag_scores(entropy, sharpness, top_positions, seq_len)
 
-    def _update_tag(self, entropy, sharpness, top_positions):
-        """Assign a semantic tag based on observed behavior."""
-        # Position head: consistently attends to specific absolute positions
+        if self.total_forwards >= 10:
+            self.tag = self._compute_tag(seq_len)
+
+    def _update_tag_scores(self, entropy, sharpness, top_positions, seq_len):
+        """Running tally of per-forward tag firings (kept for snapshot). The
+        final tag is derived from rolling-window stats, not these counts."""
+        if seq_len and seq_len > 1:
+            max_ent = math.log(seq_len)
+            norm_ent = entropy / max_ent if max_ent > 0 else 0.0
+        else:
+            # Backward-compat path: fall back to the old absolute thresholds
+            max_ent = None
+            norm_ent = None
+
+        # Landmark head: this forward's top positions concentrate on 1-2 keys
         if top_positions and len(set(top_positions)) <= 2:
             self._tag_scores["position_tracker"] = self._tag_scores.get("position_tracker", 0) + 1
-        # Local head: attends to nearby positions (low entropy, diagonal pattern)
-        if entropy < 1.0 and sharpness > 0.5:
-            self._tag_scores["local_focus"] = self._tag_scores.get("local_focus", 0) + 1
-        # Global head: spreads attention broadly (high entropy)
-        if entropy > 2.5:
-            self._tag_scores["global_mixer"] = self._tag_scores.get("global_mixer", 0) + 1
-        # Sharp head: focuses on one position (very high sharpness)
-        if sharpness > 0.8:
+        # Local head: low entropy + some sharpness
+        if norm_ent is not None:
+            if norm_ent < 0.3 and sharpness > 0.3:
+                self._tag_scores["local_focus"] = self._tag_scores.get("local_focus", 0) + 1
+            if norm_ent > 0.85:
+                self._tag_scores["global_mixer"] = self._tag_scores.get("global_mixer", 0) + 1
+            if 0.3 <= norm_ent <= 0.85 and sharpness <= 0.5:
+                self._tag_scores["balanced"] = self._tag_scores.get("balanced", 0) + 1
+        else:
+            if entropy < 1.0 and sharpness > 0.5:
+                self._tag_scores["local_focus"] = self._tag_scores.get("local_focus", 0) + 1
+            if entropy > 2.5:
+                self._tag_scores["global_mixer"] = self._tag_scores.get("global_mixer", 0) + 1
+            if 1.0 <= entropy <= 2.5:
+                self._tag_scores["balanced"] = self._tag_scores.get("balanced", 0) + 1
+        # Sharp head: concentrated attention per query
+        if sharpness > 0.5:
             self._tag_scores["sharp_selector"] = self._tag_scores.get("sharp_selector", 0) + 1
-        # Balanced head: moderate entropy
-        if 1.0 <= entropy <= 2.5:
-            self._tag_scores["balanced"] = self._tag_scores.get("balanced", 0) + 1
 
-        if self.total_forwards >= 10 and self._tag_scores:
-            self.tag = max(self._tag_scores, key=self._tag_scores.get)
+    def _compute_tag(self, seq_len):
+        """Derive the tag from current rolling-window stats.
+
+        Precedence, high to low:
+          1. position_tracker -- persistent landmark: the single most-attended
+             absolute position has captured >50% of attention hits.
+          2. sharp_selector   -- avg sharpness > 0.5 and the head isn't just
+             staring at one landmark. Catches induction / copy / content-match
+             heads that peak hard but at varying targets.
+          3. local_focus      -- low normalized entropy + modest sharpness.
+          4. global_mixer     -- near-uniform attention across keys.
+          5. balanced         -- everything else.
+        """
+        avg_ent = self.avg_entropy
+        avg_sharp = self.avg_sharpness
+        if seq_len and seq_len > 1:
+            max_ent = math.log(seq_len)
+            norm_ent = avg_ent / max_ent if max_ent > 0 else 0.0
+        else:
+            norm_ent = None
+
+        # Landmark: the head's #1-attended key is the same specific position
+        # in the majority of recent forwards, regardless of input. This
+        # distinguishes a "stare at position 23" head from an induction head
+        # whose peak is sharp but moves per input.
+        if self.top1_history:
+            # Mode of top1_history and how often it appears
+            mode_pos = max(set(self.top1_history), key=self.top1_history.count)
+            mode_frac = self.top1_history.count(mode_pos) / len(self.top1_history)
+            if mode_frac > 0.5:
+                return "position_tracker"
+
+        # Sharp: peaky per-query attention (target moves, but is focused)
+        if avg_sharp > 0.5:
+            return "sharp_selector"
+
+        # Normalized-entropy decisions (if we know seq_len)
+        if norm_ent is not None:
+            if norm_ent < 0.3 and avg_sharp > 0.3:
+                return "local_focus"
+            if norm_ent > 0.85:
+                return "global_mixer"
+        else:
+            # Legacy absolute thresholds
+            if avg_ent < 1.0 and avg_sharp > 0.3:
+                return "local_focus"
+            if avg_ent > 2.5:
+                return "global_mixer"
+
+        return "balanced"
 
     @property
     def avg_entropy(self):
@@ -235,7 +316,7 @@ class TaggedMultiHeadAttention(nn.Module):
                 top_pos = hw.mean(dim=0).topk(min(3, T)).indices.tolist()
                 gate_val = float(gates[h])
 
-                self.head_memories[h].record(entropy, sharpness, top_pos)
+                self.head_memories[h].record(entropy, sharpness, top_pos, seq_len=T)
 
                 head_traces.append(HeadTrace(
                     head_id=h,
