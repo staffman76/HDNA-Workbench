@@ -1,0 +1,306 @@
+{
+  "config": {
+    "seed": 0,
+    "n_review": 500,
+    "n_forget": 80,
+    "phase1_stages": [
+      [
+        15,
+        0.3
+      ],
+      [
+        20,
+        0.7
+      ],
+      [
+        30,
+        0.9
+      ],
+      [
+        50,
+        0.98
+      ]
+    ],
+    "phase1_levels": [
+      0,
+      1,
+      2
+    ]
+  },
+  "verdict": {
+    "P1_mastery_ladder_hit_every_rung": true,
+    "P1_per_level_rungs": {
+      "0": [
+        "ATTEMPTED",
+        "COMPETENT",
+        "LEARNING",
+        "MASTERED",
+        "PROFICIENT"
+      ],
+      "1": [
+        "ATTEMPTED",
+        "COMPETENT",
+        "LEARNING",
+        "MASTERED",
+        "PROFICIENT"
+      ],
+      "2": [
+        "ATTEMPTED",
+        "COMPETENT",
+        "LEARNING",
+        "MASTERED",
+        "PROFICIENT"
+      ],
+      "3": []
+    },
+    "P2_is_passed_integrity": true,
+    "P2_violations": [],
+    "P3_prereq_gating": true,
+    "P3_violation_count": 0,
+    "P4_review_fraction_in_range": true,
+    "P4_review_fraction": 0.228,
+    "P5_forgetting_detected": true,
+    "P5_final_forgotten": [
+      {
+        "level_id": 0,
+        "name": "add_small",
+        "accuracy": 0.0,
+        "threshold": 0.95
+      }
+    ],
+    "P5_target_final_snapshot": {
+      "level_id": 0,
+      "name": "add_small",
+      "num_tasks": 10,
+      "difficulty": 0.1,
+      "attempts": 233,
+      "accuracy": 0.5837,
+      "recent_accuracy": 0.0,
+      "mastery": "LEARNING",
+      "passed": false,
+      "prerequisites": []
+    },
+    "P6_forgetting_events_not_duplicated": true,
+    "P6_forgetting_events_logged": 1
+  },
+  "phase1_final_progress": {
+    "name": "toy_math",
+    "total_levels": 4,
+    "mastered": 3,
+    "progress_pct": 75.0,
+    "current_level": "mixed",
+    "forgetting_events": 0
+  },
+  "phase1_final_snapshots": [
+    {
+      "level_id": 0,
+      "name": "add_small",
+      "num_tasks": 10,
+      "difficulty": 0.1,
+      "attempts": 115,
+      "accuracy": 0.8522,
+      "recent_accuracy": 0.96,
+      "mastery": "MASTERED",
+      "passed": true,
+      "prerequisites": []
+    },
+    {
+      "level_id": 1,
+      "name": "add_big",
+      "num_tasks": 10,
+      "difficulty": 0.3,
+      "attempts": 115,
+      "accuracy": 0.8174,
+      "recent_accuracy": 0.98,
+      "mastery": "MASTERED",
+      "passed": true,
+      "prerequisites": [
+        0
+      ]
+    },
+    {
+      "level_id": 2,
+      "name": "mul",
+      "num_tasks": 10,
+      "difficulty": 0.5,
+      "attempts": 115,
+      "accuracy": 0.7739,
+      "recent_accuracy": 0.98,
+      "mastery": "MASTERED",
+      "passed": true,
+      "prerequisites": [
+        1
+      ]
+    },
+    {
+      "level_id": 3,
+      "name": "mixed",
+      "num_tasks": 10,
+      "difficulty": 0.7,
+      "attempts": 0,
+      "accuracy": 0.0,
+      "recent_accuracy": 0.0,
+      "mastery": "UNTOUCHED",
+      "passed": false,
+      "prerequisites": [
+        2
+      ]
+    }
+  ],
+  "phase1_rungs_seen": {
+    "0": [
+      "ATTEMPTED",
+      "COMPETENT",
+      "LEARNING",
+      "MASTERED",
+      "PROFICIENT"
+    ],
+    "1": [
+      "ATTEMPTED",
+      "COMPETENT",
+      "LEARNING",
+      "MASTERED",
+      "PROFICIENT"
+    ],
+    "2": [
+      "ATTEMPTED",
+      "COMPETENT",
+      "LEARNING",
+      "MASTERED",
+      "PROFICIENT"
+    ],
+    "3": []
+  },
+  "phase2": {
+    "n_attempts": 500,
+    "current_level_before": 3,
+    "review_count": 114,
+    "new_count": 386,
+    "review_fraction": 0.228
+  },
+  "phase3_final_target_snapshot": {
+    "level_id": 0,
+    "name": "add_small",
+    "num_tasks": 10,
+    "difficulty": 0.1,
+    "attempts": 233,
+    "accuracy": 0.5837,
+    "recent_accuracy": 0.0,
+    "mastery": "LEARNING",
+    "passed": false,
+    "prerequisites": []
+  },
+  "phase3_forget_reports": [
+    {
+      "attempt_in_phase": 0,
+      "target_recent_accuracy": 0.98,
+      "target_mastery": "MASTERED",
+      "forgotten_list": []
+    },
+    {
+      "attempt_in_phase": 10,
+      "target_recent_accuracy": 0.78,
+      "target_mastery": "COMPETENT",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.78,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 20,
+      "target_recent_accuracy": 0.58,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.58,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 30,
+      "target_recent_accuracy": 0.38,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.38,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 40,
+      "target_recent_accuracy": 0.18,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.18,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 50,
+      "target_recent_accuracy": 0.0,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 60,
+      "target_recent_accuracy": 0.0,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 70,
+      "target_recent_accuracy": 0.0,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "attempt_in_phase": 79,
+      "target_recent_accuracy": 0.0,
+      "target_mastery": "LEARNING",
+      "forgotten_list": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    }
+  ],
+  "phase3_events_logged": 1
+}

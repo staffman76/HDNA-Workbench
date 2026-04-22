@@ -1,0 +1,297 @@
+{
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "pass_counts": {
+    "P1_mastery_ladder_hit_every_rung": 3,
+    "P2_is_passed_integrity": 3,
+    "P3_prereq_gating": 3,
+    "P4_review_fraction_in_range": 3,
+    "P5_forgetting_detected": 3,
+    "P6_forgetting_events_not_duplicated": 3
+  },
+  "review_fraction_summary": {
+    "values": [
+      0.228,
+      0.194,
+      0.214
+    ],
+    "mean": 0.212,
+    "stdev": 0.017088007490635063
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "verdict": {
+        "P1_mastery_ladder_hit_every_rung": true,
+        "P1_per_level_rungs": {
+          "0": [
+            "ATTEMPTED",
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "1": [
+            "ATTEMPTED",
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "2": [
+            "ATTEMPTED",
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "3": []
+        },
+        "P2_is_passed_integrity": true,
+        "P2_violations": [],
+        "P3_prereq_gating": true,
+        "P3_violation_count": 0,
+        "P4_review_fraction_in_range": true,
+        "P4_review_fraction": 0.228,
+        "P5_forgetting_detected": true,
+        "P5_final_forgotten": [
+          {
+            "level_id": 0,
+            "name": "add_small",
+            "accuracy": 0.0,
+            "threshold": 0.95
+          }
+        ],
+        "P5_target_final_snapshot": {
+          "level_id": 0,
+          "name": "add_small",
+          "num_tasks": 10,
+          "difficulty": 0.1,
+          "attempts": 233,
+          "accuracy": 0.5837,
+          "recent_accuracy": 0.0,
+          "mastery": "LEARNING",
+          "passed": false,
+          "prerequisites": []
+        },
+        "P6_forgetting_events_not_duplicated": true,
+        "P6_forgetting_events_logged": 1
+      },
+      "phase1_rungs_seen": {
+        "0": [
+          "ATTEMPTED",
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "1": [
+          "ATTEMPTED",
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "2": [
+          "ATTEMPTED",
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "3": []
+      },
+      "phase2_review_fraction": 0.228,
+      "phase3_events_logged": 1,
+      "phase3_final_forgotten": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "verdict": {
+        "P1_mastery_ladder_hit_every_rung": true,
+        "P1_per_level_rungs": {
+          "0": [
+            "ATTEMPTED",
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "1": [
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "2": [
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "3": []
+        },
+        "P2_is_passed_integrity": true,
+        "P2_violations": [],
+        "P3_prereq_gating": true,
+        "P3_violation_count": 0,
+        "P4_review_fraction_in_range": true,
+        "P4_review_fraction": 0.194,
+        "P5_forgetting_detected": true,
+        "P5_final_forgotten": [
+          {
+            "level_id": 0,
+            "name": "add_small",
+            "accuracy": 0.0,
+            "threshold": 0.95
+          }
+        ],
+        "P5_target_final_snapshot": {
+          "level_id": 0,
+          "name": "add_small",
+          "num_tasks": 10,
+          "difficulty": 0.1,
+          "attempts": 221,
+          "accuracy": 0.543,
+          "recent_accuracy": 0.0,
+          "mastery": "LEARNING",
+          "passed": false,
+          "prerequisites": []
+        },
+        "P6_forgetting_events_not_duplicated": true,
+        "P6_forgetting_events_logged": 1
+      },
+      "phase1_rungs_seen": {
+        "0": [
+          "ATTEMPTED",
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "1": [
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "2": [
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "3": []
+      },
+      "phase2_review_fraction": 0.194,
+      "phase3_events_logged": 1,
+      "phase3_final_forgotten": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    },
+    {
+      "seed": 2,
+      "verdict": {
+        "P1_mastery_ladder_hit_every_rung": true,
+        "P1_per_level_rungs": {
+          "0": [
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "1": [
+            "ATTEMPTED",
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "2": [
+            "COMPETENT",
+            "LEARNING",
+            "MASTERED",
+            "PROFICIENT"
+          ],
+          "3": []
+        },
+        "P2_is_passed_integrity": true,
+        "P2_violations": [],
+        "P3_prereq_gating": true,
+        "P3_violation_count": 0,
+        "P4_review_fraction_in_range": true,
+        "P4_review_fraction": 0.214,
+        "P5_forgetting_detected": true,
+        "P5_final_forgotten": [
+          {
+            "level_id": 0,
+            "name": "add_small",
+            "accuracy": 0.0,
+            "threshold": 0.95
+          }
+        ],
+        "P5_target_final_snapshot": {
+          "level_id": 0,
+          "name": "add_small",
+          "num_tasks": 10,
+          "difficulty": 0.1,
+          "attempts": 228,
+          "accuracy": 0.5789,
+          "recent_accuracy": 0.0,
+          "mastery": "LEARNING",
+          "passed": false,
+          "prerequisites": []
+        },
+        "P6_forgetting_events_not_duplicated": true,
+        "P6_forgetting_events_logged": 1
+      },
+      "phase1_rungs_seen": {
+        "0": [
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "1": [
+          "ATTEMPTED",
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "2": [
+          "COMPETENT",
+          "LEARNING",
+          "MASTERED",
+          "PROFICIENT"
+        ],
+        "3": []
+      },
+      "phase2_review_fraction": 0.214,
+      "phase3_events_logged": 1,
+      "phase3_final_forgotten": [
+        {
+          "level_id": 0,
+          "name": "add_small",
+          "accuracy": 0.0,
+          "threshold": 0.95
+        }
+      ]
+    }
+  ]
+}

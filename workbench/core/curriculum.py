@@ -74,6 +74,11 @@ class Level:
     attempts: int = 0
     correct: int = 0
     mastery: Mastery = Mastery.UNTOUCHED
+    # Sticky: set True the first time mastery hits MASTERED and never reset.
+    # Needed because `mastery` demotes with recent_accuracy, so by the time
+    # forgetting is detectable the enum no longer says MASTERED. check_forgetting
+    # uses this flag instead of the current enum to decide "was once mastered".
+    was_mastered: bool = False
     _recent_correct: list = field(default_factory=list)
 
     @property
@@ -109,6 +114,7 @@ class Level:
         acc = self.recent_accuracy
         if acc >= 0.95 and len(self._recent_correct) >= 20:
             self.mastery = Mastery.MASTERED
+            self.was_mastered = True
         elif acc >= 0.85:
             self.mastery = Mastery.PROFICIENT
         elif acc >= 0.60:
@@ -147,6 +153,10 @@ class Curriculum:
         self.description = description
         self.levels: list[Level] = []
         self._forgetting_events: list = []
+        # Tracks which level_ids are currently in a "forgotten" state so that
+        # check_forgetting() logs exactly one event per episode, not one per
+        # call while the episode persists.
+        self._forgetting_active: dict[int, bool] = {}
 
     def add_level(self, level: Level):
         """Add a level to the curriculum."""
@@ -196,25 +206,43 @@ class Curriculum:
         """
         Check if any previously mastered levels have degraded.
 
-        Returns list of (level_id, level_name, current_accuracy) for
-        levels that were mastered but have dropped below threshold.
+        A level is "forgotten" if it was ever mastered (`was_mastered=True`)
+        but its `recent_accuracy` has dropped at least 10 pts below its
+        mastery_threshold. Uses the sticky `was_mastered` flag rather than
+        the current mastery enum, because `_update_mastery()` demotes the
+        enum as accuracy drops — by the time the accuracy gate opens, the
+        mastery gate would have closed.
+
+        Returns the list of currently-forgotten levels. `_forgetting_events`
+        is appended exactly once per episode: when a level transitions from
+        ok into forgotten. Recovery (accuracy climbs back above threshold)
+        re-arms the episode tracker so a future regression counts again.
         """
         forgotten = []
         for level in self.levels:
-            if (level.mastery >= Mastery.MASTERED and
-                level.recent_accuracy < level.mastery_threshold - 0.1 and
-                len(level._recent_correct) >= 20):
+            is_forgotten = (level.was_mastered
+                            and level.recent_accuracy
+                                < level.mastery_threshold - 0.1
+                            and len(level._recent_correct) >= 20)
+            was_active = self._forgetting_active.get(level.level_id, False)
+
+            if is_forgotten:
                 forgotten.append({
                     "level_id": level.level_id,
                     "name": level.name,
                     "accuracy": round(level.recent_accuracy, 4),
                     "threshold": level.mastery_threshold,
                 })
-                self._forgetting_events.append({
-                    "level_id": level.level_id,
-                    "at_attempt": level.attempts,
-                    "accuracy": level.recent_accuracy,
-                })
+                if not was_active:
+                    self._forgetting_events.append({
+                        "level_id": level.level_id,
+                        "at_attempt": level.attempts,
+                        "accuracy": level.recent_accuracy,
+                    })
+                    self._forgetting_active[level.level_id] = True
+            elif was_active and level.recent_accuracy >= level.mastery_threshold:
+                # Recovered — re-arm so a future regression logs a new event.
+                self._forgetting_active[level.level_id] = False
         return forgotten
 
     @property
