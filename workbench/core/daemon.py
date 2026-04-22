@@ -271,7 +271,7 @@ class Coordinator:
     """
 
     def __init__(self, scaffold_decay_rate: float = 0.001,
-                 scaffold_floor: float = 0.4):
+                 scaffold_floor: float = 0.1):
         self.daemons: dict[str, Daemon] = {}
         self.scaffold_strength: float = 1.0  # 1.0 = full scaffold, 0.0 = brain only
         self.scaffold_decay_rate = scaffold_decay_rate
