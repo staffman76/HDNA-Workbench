@@ -21,13 +21,21 @@ from enum import IntEnum
 
 
 class Mastery(IntEnum):
-    """Mastery level for a curriculum level."""
+    """
+    Current mastery level for a curriculum level.
+
+    This enum reflects CURRENT recent performance — `Level._update_mastery`
+    walks the enum both up and down each attempt, so a level whose accuracy
+    drops after mastery will show e.g. `LEARNING` again, not `MASTERED`.
+    For "was ever mastered" (e.g. catastrophic-forgetting detection), use
+    `Level.was_mastered` (sticky) instead of comparing this enum.
+    """
     UNTOUCHED = 0
     ATTEMPTED = 1
-    LEARNING = 2    # accuracy > 25%
-    COMPETENT = 3   # accuracy > 60%
-    PROFICIENT = 4  # accuracy > 85%
-    MASTERED = 5    # accuracy > 95% sustained
+    LEARNING = 2    # recent_accuracy >= 25%
+    COMPETENT = 3   # recent_accuracy >= 60%
+    PROFICIENT = 4  # recent_accuracy >= 85%
+    MASTERED = 5    # recent_accuracy >= 95% with >= 20 recent samples
 
 
 @dataclass

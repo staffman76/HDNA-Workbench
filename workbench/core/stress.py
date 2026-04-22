@@ -236,7 +236,8 @@ class HomeostasisDaemon(Daemon):
                     reasoning=f"{len(dead_ids)} dead hidden neurons detected ({report.dead_pct:.1f}%)",
                     # Prune must fire before spawn so "most depleted layer"
                     # in apply_interventions reflects the post-prune state.
-                    priority=0.9 if "critical" in str(report.warnings) else 0.7,
+                    priority=(0.9 if "dead_neurons_critical" in report.warnings
+                              else 0.7),
                 ))
                 # Spawn replacements
                 interventions.append(Intervention(
