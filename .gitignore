@@ -21,3 +21,6 @@ _business/
 .DS_Store
 Thumbs.db
 workbench/viewer/saves/
+
+# Experiment data caches (re-downloaded on demand)
+experiments/*/_data/

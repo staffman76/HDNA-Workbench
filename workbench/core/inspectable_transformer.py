@@ -183,7 +183,7 @@ class TaggedMultiHeadAttention(nn.Module):
         self._last_attn_weights = None
         self._last_trace = None
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, return_trace: bool = True):
         B, T, D = x.shape
         H = self.n_heads
         Dh = self.head_dim
@@ -192,16 +192,31 @@ class TaggedMultiHeadAttention(nn.Module):
         k = self.k_proj(x).view(B, T, H, Dh).transpose(1, 2)
         v = self.v_proj(x).view(B, T, H, Dh).transpose(1, 2)
 
-        # Scaled dot-product attention
+        gates = torch.sigmoid(self.head_gates)  # (H,)
+
+        if not return_trace:
+            # Fast path: fused SDPA (FlashAttention on CUDA when available).
+            # Skips materializing the (B, H, T, T) attention matrix, so trace
+            # can't be built from this path — that's fine, trace is off.
+            # Head gates are applied to the per-head output, which is
+            # mathematically equivalent to gating post-softmax attention
+            # weights: (g * W) @ V = g * (W @ V).
+            out = F.scaled_dot_product_attention(
+                q, k, v, is_causal=(mask is not None)
+            )
+            out = out * gates.view(1, H, 1, 1)
+            out = out.transpose(1, 2).contiguous().view(B, T, D)
+            out = self.out_proj(out)
+            return out, None
+
+        # Slow path: materialize attention weights so trace stats (entropy,
+        # sharpness, top positions) can be computed from them.
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(Dh)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e9)
         attn_weights = F.softmax(scores, dim=-1)  # (B, H, T, T)
 
-        # Apply head gates (sigmoid)
-        gates = torch.sigmoid(self.head_gates)  # (H,)
         gated_weights = attn_weights * gates.view(1, H, 1, 1)
-
         out = torch.matmul(gated_weights, v)  # (B, H, T, Dh)
         out = out.transpose(1, 2).contiguous().view(B, T, D)
         out = self.out_proj(out)
@@ -249,9 +264,13 @@ class RoutedExpertMLP(nn.Module):
     """
     Mixture of Experts MLP with logged routing decisions.
 
-    Instead of one dense FFN, we have N small experts. A router
-    decides which expert handles each token. The routing decision
-    is inspectable.
+    Packed-parameter implementation: all expert weights are stored as a
+    single (n_experts, d_in, d_out) tensor per layer so the whole expert
+    bank runs in two einsum calls instead of a top_k*n_experts Python loop.
+    Top-k routing is still enforced by zeroing out non-top-k weights in a
+    full-width routing mask before combining outputs — mathematically
+    equivalent to the prior sparse-dispatch implementation, just with
+    O(1) kernel launches instead of O(top_k * n_experts).
     """
 
     def __init__(self, d_model: int, d_ff: int, n_experts: int = 4,
@@ -260,19 +279,19 @@ class RoutedExpertMLP(nn.Module):
         self.d_model = d_model
         self.n_experts = n_experts
         self.top_k = top_k
+        self.d_ff_per_expert = d_ff // n_experts
 
         # Router: decides which experts handle each token
         self.router = nn.Linear(d_model, n_experts)
 
-        # Experts: each is a small FFN
-        self.experts = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(d_model, d_ff // n_experts),
-                nn.GELU(),
-                nn.Linear(d_ff // n_experts, d_model),
-            )
-            for _ in range(n_experts)
-        ])
+        # Packed expert parameters. Shapes:
+        #   W1: (n_experts, d_model, d_ff_per)
+        #   W2: (n_experts, d_ff_per, d_model)
+        self.W1 = nn.Parameter(torch.empty(n_experts, d_model, self.d_ff_per_expert))
+        self.b1 = nn.Parameter(torch.zeros(n_experts, self.d_ff_per_expert))
+        self.W2 = nn.Parameter(torch.empty(n_experts, self.d_ff_per_expert, d_model))
+        self.b2 = nn.Parameter(torch.zeros(n_experts, d_model))
+        self._reset_expert_parameters()
 
         # Expert names (auto-assigned based on specialization)
         self.expert_names = [f"expert_{i}" for i in range(n_experts)]
@@ -280,29 +299,49 @@ class RoutedExpertMLP(nn.Module):
 
         self._last_trace = None
 
-    def forward(self, x):
-        B, T, D = x.shape
+    def _reset_expert_parameters(self):
+        """
+        Match nn.Linear's default init scheme per expert. A Linear(d_in, d_out)
+        initializes weight ~ U(-1/sqrt(d_in), 1/sqrt(d_in)) (equivalent to
+        kaiming_uniform with a=sqrt(5)), and bias with the same bound. Calling
+        kaiming_uniform_ directly on our packed (n_experts, d_in, d_out) tensor
+        would compute fan_in = d_in * d_out (treating d_out as receptive field)
+        and produce weights ~sqrt(d_out) times too small.
+        """
+        bound_1 = 1.0 / math.sqrt(self.d_model)
+        bound_2 = 1.0 / math.sqrt(self.d_ff_per_expert)
+        nn.init.uniform_(self.W1, -bound_1, bound_1)
+        nn.init.uniform_(self.W2, -bound_2, bound_2)
+        nn.init.uniform_(self.b1, -bound_1, bound_1)
+        nn.init.uniform_(self.b2, -bound_2, bound_2)
 
+    def forward(self, x, return_trace: bool = True):
+        # x: (B, T, D)
         # Router decides which experts to use per token
-        router_logits = self.router(x)  # (B, T, n_experts)
-        routing_weights = F.softmax(router_logits, dim=-1)
+        router_logits = self.router(x)                          # (B, T, n_experts)
+        routing_weights = F.softmax(router_logits, dim=-1)      # (B, T, n_experts)
 
-        # Select top-k experts per token
+        # Top-k: select + renormalize, then scatter into a full-width mask.
+        # Non-top-k experts will contribute zero to the output.
         top_k_weights, top_k_indices = routing_weights.topk(self.top_k, dim=-1)
-        top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)  # renormalize
+        top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)
+        routing_mask = torch.zeros_like(routing_weights).scatter(
+            -1, top_k_indices, top_k_weights
+        )                                                        # (B, T, n_experts)
 
-        # Run selected experts and combine
-        output = torch.zeros_like(x)
-        for k in range(self.top_k):
-            expert_idx = top_k_indices[:, :, k]  # (B, T)
-            weight = top_k_weights[:, :, k:k+1]  # (B, T, 1)
+        # Run all experts on all tokens in two einsum calls.
+        # h1: (B, T, n_experts, d_ff_per)
+        h1 = torch.einsum("btd,nde->btne", x, self.W1) + self.b1
+        h1 = F.gelu(h1)
+        # out_per_expert: (B, T, n_experts, D)
+        out_per_expert = torch.einsum("btne,nef->btnf", h1, self.W2) + self.b2
 
-            for e in range(self.n_experts):
-                mask = (expert_idx == e)  # (B, T)
-                if mask.any():
-                    expert_input = x[mask]  # (N, D)
-                    expert_output = self.experts[e](expert_input)
-                    output[mask] += (weight.squeeze(-1)[mask].unsqueeze(-1) * expert_output)
+        # Weight by top-k routing mask; non-top-k experts have zero weight.
+        output = (out_per_expert * routing_mask.unsqueeze(-1)).sum(dim=-2)
+
+        if not return_trace:
+            # Fast path: skip .tolist() syncs and Python-side usage counting.
+            return output, None
 
         # Build trace
         with torch.no_grad():
@@ -347,16 +386,20 @@ class InspectableTransformerLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self._last_trace = None
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, return_trace: bool = True):
         # Self-attention with residual
         normed = self.norm1(x)
-        attn_out, head_traces = self.attention(normed, mask)
+        attn_out, head_traces = self.attention(normed, mask, return_trace=return_trace)
         x = x + self.dropout(attn_out)
 
         # Expert MLP with residual
         normed = self.norm2(x)
-        expert_out, expert_trace = self.experts(normed)
+        expert_out, expert_trace = self.experts(normed, return_trace=return_trace)
         x = x + self.dropout(expert_out)
+
+        if not return_trace:
+            # Skip residual-norm sync and LayerTrace construction.
+            return x, None
 
         # Build layer trace
         residual_norm = float(x.detach().norm(dim=-1).mean())
@@ -461,11 +504,12 @@ class InspectableTransformer(nn.Module):
         # Run through layers, collecting traces
         layer_traces = []
         for i, layer in enumerate(self.layers):
-            x, layer_trace = layer(x, mask)
-            layer_trace.layer_id = i
-            if layer_trace.expert_trace:
-                layer_trace.expert_trace.layer = i
-            layer_traces.append(layer_trace)
+            x, layer_trace = layer(x, mask, return_trace=return_trace)
+            if layer_trace is not None:
+                layer_trace.layer_id = i
+                if layer_trace.expert_trace:
+                    layer_trace.expert_trace.layer = i
+                layer_traces.append(layer_trace)
 
         # Output
         x = self.norm(x)
