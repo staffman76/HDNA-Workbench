@@ -14,8 +14,9 @@ A sequence of empirical tests targeting specific load-bearing claims in `ARCHITE
 | 6 | [daemon_phases/](daemon_phases/) | `Daemon.advance_phase` quality-gated `APPRENTICE → INDEPENDENT` progression | ✅ **Qualified pass** after abstention fix | ~10 lines |
 | 7 | [scaffold_decay/](scaffold_decay/) | `Coordinator.scaffold_strength` decays correctly; selection blends confidence × Q-values | ✅ **Clean pass** (no fix needed; calibration note on default floor) | 0 lines |
 | 8 | [curriculum_mastery/](curriculum_mastery/) | Mastery ladder + sustained-pass gate + prereq chain + 80/20 mix + catastrophic-forgetting detection + event dedup | ✅ **Pass** after 2 bug fixes (dead-code forgetting gate + duplicate events) | ~20 lines |
+| 9 | [stress_homeostasis/](stress_homeostasis/) | `StressMonitor` + `HomeostasisDaemon` + `apply_interventions` close the dead-neuron loop | ✅ **Pass** after 2 bug fixes (priority order + spawn routing) | ~35 lines |
 
-**Cumulative diff**: eight experiments, twelve files touched in `workbench/core/`, ~260 lines of fixes, ~51 plots, ~7500 lines of experiment code + results JSON.
+**Cumulative diff**: nine experiments, thirteen files touched in `workbench/core/`, ~295 lines of fixes, ~53 plots, ~7900 lines of experiment code + results JSON.
 
 ## The pattern across all five
 
@@ -29,8 +30,9 @@ Every claim tested was **substantively correct** — the architecture's underlyi
 - **daemon phases**: `Coordinator.record_outcome` iterated over every registered daemon — so an abstaining daemon (`reason()` returned `None`) still accumulated `proposals_made` per round. Tracking the actual proposers in `collect_proposals` and using that set in `record_outcome` fixed it.
 - **scaffold decay**: no core fix needed. Decay math exact to floating-point precision; confidence-Q blend works as specified. Calibration note only: default `scaffold_floor=0.4` gives inconsistent mitigation of the confidence-only quirk (helps 2/3 seeds, slightly hurts 1/3); `floor=0` gives full reliable mitigation.
 - **curriculum mastery**: `check_forgetting()` was dead code — its gate required `mastery >= MASTERED` while `_update_mastery()` demotes the enum as accuracy drops, so the two conditions could never hold simultaneously. Added a sticky `was_mastered` flag on `Level` and gated on that instead. Also added episode-based dedup so `_forgetting_events` logs once per regression, not once per call.
+- **stress homeostasis**: prune-and-spawn loop was broken two ways. Warning-level prune priority (0.5) was below spawn's (0.6) so spawn ran first on stale layer sizes; and spawned neurons had weights but no routing, so they silently collected zero inputs and became dead within 32 forwards. Bumped prune priorities above spawn, and added He-scaled routing wiring for spawned neurons. Loop now closes: ~38% → ~3.5% `dead_pct` in one round.
 
-None of the eight tests found anything fundamentally broken in the architectural design. Integration gaps, when present, had targeted fixes of a few to a few dozen lines.
+None of the nine tests found anything fundamentally broken in the architectural design. Integration gaps, when present, had targeted fixes of a few to a few dozen lines.
 
 ## Headline numbers (after fixes)
 
@@ -131,6 +133,20 @@ Decay math matches `max(floor, start − i·rate)` to `8.9e-16` max error. Full 
 
 `check_forgetting()` was dead code pre-fix: its gate required `mastery >= MASTERED` simultaneously with `recent_accuracy < threshold - 0.1`, but `_update_mastery()` demotes the enum as accuracy drops, so those conditions could never co-hold. Fix: sticky `was_mastered` flag on `Level` + episode-based dedup on `_forgetting_events`. ~20 lines.
 
+### 9. Stress monitor + homeostasis
+Small HDNANetwork (4-[10,6]-3), 4-phase run (warmup / healthy / damage injection / apply+recover), seeds `{0, 1, 2}`. All 10 predictions pass 3/3 after the fix:
+
+| metric | result |
+|:--|:--|
+| Warmup suppression (no warnings when ep < 20) | 3/3 |
+| Healthy `dead_pct` below `DEAD_PCT_WARN` & daemon silent | 3/3 |
+| Post-damage `dead_pct ≥ 25%` with warning raised | 3/3 (mean **38.6%**) |
+| Daemon proposed both prune and spawn | 3/3 |
+| `apply_interventions` pruned + spawned non-zero counts | 3/3 (7.33 each mean) |
+| Post-recovery `dead_pct` strictly lower than damage | 3/3 (mean **3.5%**, values `[0, 10.5, 0]`) |
+
+Two stacked bugs in `workbench/core/stress.py`. First: for regular warnings, `prune` priority (0.5) was below `spawn`'s (0.6), so spawn ran first and computed "most depleted layer" from pre-prune state. Bumped priorities (`0.9 / 0.7` for critical / warning). Second and larger: `apply_interventions` called `net.add_neuron()` but never wired routing — spawned layer-2+ neurons received no inputs, collected zeros, and became `is_dead=True` within 32 forwards, so the loop produced "different dead neurons." Added He-scaled in/out routing to mirror `_build_default_topology`. Total `stress.py` diff: ~35 lines.
+
 ## Known gaps not yet closed
 
 Documented in individual experiment READMEs, preserved here as a single punch list:
@@ -142,9 +158,7 @@ Documented in individual experiment READMEs, preserved here as a single punch li
 
 ## Claims we haven't tested yet
 
-The validation campaign hit the top-priority load-bearing claims. Still outstanding:
-
-- **Stress monitor → homeostasis daemon loop.** Does the system prune dead neurons / spawn replacements as intended?
+All nine originally-scoped load-bearing claims have been validated. Known unknowns from within-experiment "known gaps" sections remain (see each experiment README), but the campaign as originally scoped is complete.
 
 Given the pattern so far, it's worth expecting each to reveal a fixable integration gap or two, rather than a fundamental failure.
 
@@ -181,6 +195,10 @@ python -m experiments.scaffold_decay.multi_seed
 # Curriculum mastery + forgetting (~2 s per seed on CPU)
 python -m experiments.curriculum_mastery.run
 python -m experiments.curriculum_mastery.multi_seed
+
+# Stress monitor + homeostasis (~3 s per seed on CPU)
+python -m experiments.stress_homeostasis.run
+python -m experiments.stress_homeostasis.multi_seed
 ```
 
 Each experiment's results land under its own `results/` directory; plots in `plots/`. Every run also writes a `report.json` with full config, training curves, and aggregate metrics so downstream tooling can pick up the numbers without re-running.

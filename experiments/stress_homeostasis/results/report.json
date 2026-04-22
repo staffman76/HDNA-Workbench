@@ -1,0 +1,94 @@
+{
+  "config": {
+    "seed": 0,
+    "input_dim": 4,
+    "hidden_dims": [
+      10,
+      6
+    ],
+    "output_dim": 3,
+    "kill_count": 6,
+    "warmup_steps": 25,
+    "healthy_steps": 40,
+    "force_death_forwards": 40,
+    "recover_steps": 40
+  },
+  "verdict": {
+    "P1_warmup_suppresses_warnings": true,
+    "P2a_healthy_dead_pct_zero": true,
+    "P2b_healthy_daemon_silent": true,
+    "P2c_is_healthy_returns_true": true,
+    "P3a_damage_dead_pct_over_warn": true,
+    "P3a_value": 36.84,
+    "P3b_dead_neurons_warning_present": true,
+    "P3b_warnings": [
+      "dead_neurons_warning"
+    ],
+    "P4_daemon_proposed_prune_and_spawn": true,
+    "P4_intervention_kinds": [
+      "prune",
+      "spawn"
+    ],
+    "P5a_apply_pruned_any": true,
+    "P5a_pruned_count": 7,
+    "P5b_apply_spawned_any": true,
+    "P5b_spawned_count": 7,
+    "P6_recovery_dead_pct_lower": true,
+    "P6_damage_dead_pct": 36.84,
+    "P6_recovery_dead_pct": 0.0
+  },
+  "phase1_summary": {
+    "any_warning_in_warmup": false,
+    "daemon_proposals_made": 0
+  },
+  "phase2_summary": {
+    "final_dead_pct": 0.0,
+    "final_is_healthy": true,
+    "daemon_proposals_made": 0
+  },
+  "phase3_damage_snapshot": {
+    "episode": 105,
+    "dead_pct": 36.84,
+    "avg_jitter": 0.089006,
+    "avg_weight_drift": 0.0,
+    "max_weight_drift": 0.0,
+    "warnings": [
+      "dead_neurons_warning"
+    ]
+  },
+  "phase3_intervention_kinds": [
+    "prune",
+    "spawn"
+  ],
+  "phase3_killed_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "phase4_summary": {
+    "pre_layer_sizes": {
+      "1": 10,
+      "2": 6,
+      "3": 3
+    },
+    "pre_neurons": 19,
+    "pre_dead_count": 7,
+    "intervention_result": {
+      "pruned": 7,
+      "spawned": 7,
+      "dampened": 0,
+      "normalized": 0
+    },
+    "post_apply_layer_sizes": {
+      "1": 11,
+      "2": 6,
+      "3": 2
+    },
+    "post_apply_neurons": 19,
+    "final_dead_pct": 0.0,
+    "final_warnings": []
+  }
+}

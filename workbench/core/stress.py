@@ -227,7 +227,9 @@ class HomeostasisDaemon(Daemon):
                     kind="prune",
                     target_ids=dead_ids[:20],  # batch limit
                     reasoning=f"{len(dead_ids)} dead neurons detected ({report.dead_pct:.1f}%)",
-                    priority=0.8 if "critical" in str(report.warnings) else 0.5,
+                    # Prune must fire before spawn so "most depleted layer"
+                    # in apply_interventions reflects the post-prune state.
+                    priority=0.9 if "critical" in str(report.warnings) else 0.7,
                 ))
                 # Spawn replacements
                 interventions.append(Intervention(
@@ -280,19 +282,43 @@ def apply_interventions(net, proposal: HomeostasisProposal,
 
         elif intervention.kind == "spawn":
             count = intervention.params.get("count", 5)
-            # Find the most depleted hidden layer
+            # Find the most depleted hidden layer (evaluated AFTER any prune
+            # intervention has already run — apply_interventions sorts by
+            # priority descending and prune outranks spawn by construction).
             layer_sizes = net.layer_sizes
             hidden_layers = {k: v for k, v in layer_sizes.items()
                             if k > 0 and k < net.num_layers - 1}
             if hidden_layers:
                 target_layer = min(hidden_layers, key=hidden_layers.get)
+                prev_neurons = net.get_layer_neurons(target_layer - 1)
+                next_neurons = net.get_layer_neurons(target_layer + 1)
+                # n_inputs for the neuron's own weights: for layer 1 this is
+                # the input projection (input_dim). For layer >= 2 the weights
+                # aren't used in forward (routing-driven), but add_neuron
+                # requires a sane shape — use prev-layer size as a proxy.
+                n_inputs = (net.input_dim if target_layer == 1
+                            else max(1, len(prev_neurons)))
+                current_size = hidden_layers[target_layer]
+                he_scale_in = np.sqrt(2.0 / max(1, len(prev_neurons)))
+                he_scale_out = np.sqrt(2.0 / max(1, current_size + count))
                 for _ in range(count):
-                    net.add_neuron(
-                        n_inputs=net.input_dim,
+                    nid = net.add_neuron(
+                        n_inputs=n_inputs,
                         layer=target_layer,
                         tags={"hidden", "spawned"},
                         rng=r,
                     )
+                    # Wire incoming routes (only meaningful for layer >= 2;
+                    # layer 1 uses its own weights on the raw inputs).
+                    if target_layer >= 2:
+                        for prev in prev_neurons:
+                            net.connect(prev.neuron_id, nid,
+                                        float(r.normal(0, he_scale_in)))
+                    # Wire outgoing routes to the next layer so the new
+                    # neuron actually contributes downstream.
+                    for nxt in next_neurons:
+                        net.connect(nid, nxt.neuron_id,
+                                    float(r.normal(0, he_scale_out)))
                     result["spawned"] += 1
 
         elif intervention.kind == "dampen":
