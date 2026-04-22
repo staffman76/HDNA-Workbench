@@ -1,0 +1,620 @@
+{
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "summary": {
+    "main.oracle": {
+      "final_phase_idx": {
+        "values": [
+          2,
+          3,
+          1
+        ],
+        "mean": 2,
+        "stdev": 1.0,
+        "names": [
+          "COMPETENT",
+          "EXPERT",
+          "JOURNEYMAN"
+        ]
+      },
+      "acceptance_rate": {
+        "values": [
+          0.5592,
+          0.588,
+          0.4928
+        ],
+        "mean": 0.5466666666666666,
+        "stdev": 0.048821853030516275
+      },
+      "avg_reward": {
+        "values": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "mean": 1.0,
+        "stdev": 0.0
+      }
+    },
+    "main.noisy": {
+      "final_phase_idx": {
+        "values": [
+          1,
+          1,
+          2
+        ],
+        "mean": 1.3333333333333333,
+        "stdev": 0.5773502691896257,
+        "names": [
+          "JOURNEYMAN",
+          "JOURNEYMAN",
+          "COMPETENT"
+        ]
+      },
+      "acceptance_rate": {
+        "values": [
+          0.4092,
+          0.3756,
+          0.4884
+        ],
+        "mean": 0.4244,
+        "stdev": 0.057915800952762456
+      },
+      "avg_reward": {
+        "values": [
+          0.6559,
+          0.5698,
+          0.6134
+        ],
+        "mean": 0.6130333333333333,
+        "stdev": 0.04305117110292513
+      }
+    },
+    "main.random": {
+      "final_phase_idx": {
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "mean": 0,
+        "stdev": 0.0,
+        "names": [
+          "APPRENTICE",
+          "APPRENTICE",
+          "APPRENTICE"
+        ]
+      },
+      "acceptance_rate": {
+        "values": [
+          0.0316,
+          0.0364,
+          0.0188
+        ],
+        "mean": 0.028933333333333335,
+        "stdev": 0.009097985124923724
+      },
+      "avg_reward": {
+        "values": [
+          -0.3671,
+          -0.5385,
+          -0.617
+        ],
+        "mean": -0.5075333333333333,
+        "stdev": 0.12779555286993885
+      }
+    },
+    "probe.oracle": {
+      "final_phase_idx": {
+        "values": [
+          4,
+          4,
+          4
+        ],
+        "mean": 4,
+        "stdev": 0.0,
+        "names": [
+          "INDEPENDENT",
+          "INDEPENDENT",
+          "INDEPENDENT"
+        ]
+      },
+      "acceptance_rate": {
+        "values": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "mean": 1.0,
+        "stdev": 0.0
+      },
+      "avg_reward": {
+        "values": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "mean": 1.0,
+        "stdev": 0.0
+      }
+    },
+    "probe.abstain": {
+      "final_phase_idx": {
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "mean": 0,
+        "stdev": 0.0,
+        "names": [
+          "APPRENTICE",
+          "APPRENTICE",
+          "APPRENTICE"
+        ]
+      },
+      "acceptance_rate": {
+        "values": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "stdev": 0.0
+      },
+      "avg_reward": {
+        "values": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "stdev": 0.0
+      }
+    }
+  },
+  "pass_counts": {
+    "P1_probe_oracle_independent_by_1000": 3,
+    "P2_phase_order_oracle_ge_noisy_gt_random": 2,
+    "P2b_reward_order_oracle_gt_noisy_gt_random": 3,
+    "P3_random_apprentice_or_journeyman": 3,
+    "P4_all_transitions_gate_compliant": 3,
+    "P5_abstain_never_accepted": 3,
+    "P5b_abstain_semantics_clean": 3
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "verdict": {
+        "P1_probe_oracle_independent_by_1000": true,
+        "P2_phase_order_oracle_ge_noisy_gt_random": true,
+        "P2b_reward_order_oracle_gt_noisy_gt_random": true,
+        "P3_random_apprentice_or_journeyman": true,
+        "P4_all_transitions_gate_compliant": true,
+        "P5_abstain_never_accepted": true,
+        "P5b_abstain_semantics_clean": true,
+        "P5b_abstain_proposals_made": 0,
+        "final_phases": {
+          "main.oracle": "COMPETENT",
+          "main.noisy": "JOURNEYMAN",
+          "main.random": "APPRENTICE",
+          "probe.oracle": "INDEPENDENT",
+          "probe.abstain": "APPRENTICE"
+        }
+      },
+      "snapshots_main": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "COMPETENT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 1398,
+          "acceptance_rate": 0.5592,
+          "avg_reward": 1.0,
+          "total_reward": 1398.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 50,
+              "acceptance_rate": 0.5,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 200,
+              "acceptance_rate": 0.505,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "noisy": {
+          "name": "noisy",
+          "domain": "bandit",
+          "description": "",
+          "phase": "JOURNEYMAN",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 1023,
+          "acceptance_rate": 0.4092,
+          "avg_reward": 0.6559,
+          "total_reward": 671.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 52,
+              "acceptance_rate": 0.462,
+              "avg_reward": 0.8333
+            }
+          ]
+        },
+        "random": {
+          "name": "random",
+          "domain": "bandit",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 79,
+          "acceptance_rate": 0.0316,
+          "avg_reward": -0.3671,
+          "total_reward": -29.0,
+          "phase_history": []
+        }
+      },
+      "snapshots_probe": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "INDEPENDENT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 2500,
+          "acceptance_rate": 1.0,
+          "avg_reward": 1.0,
+          "total_reward": 2500.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 50,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 200,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "COMPETENT",
+              "to": "EXPERT",
+              "at_proposal": 500,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "EXPERT",
+              "to": "INDEPENDENT",
+              "at_proposal": 1000,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "abstain": {
+          "name": "abstain",
+          "domain": "probe",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 0,
+          "proposals_accepted": 0,
+          "acceptance_rate": 0.0,
+          "avg_reward": 0.0,
+          "total_reward": 0.0,
+          "phase_history": []
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "verdict": {
+        "P1_probe_oracle_independent_by_1000": true,
+        "P2_phase_order_oracle_ge_noisy_gt_random": true,
+        "P2b_reward_order_oracle_gt_noisy_gt_random": true,
+        "P3_random_apprentice_or_journeyman": true,
+        "P4_all_transitions_gate_compliant": true,
+        "P5_abstain_never_accepted": true,
+        "P5b_abstain_semantics_clean": true,
+        "P5b_abstain_proposals_made": 0,
+        "final_phases": {
+          "main.oracle": "EXPERT",
+          "main.noisy": "JOURNEYMAN",
+          "main.random": "APPRENTICE",
+          "probe.oracle": "INDEPENDENT",
+          "probe.abstain": "APPRENTICE"
+        }
+      },
+      "snapshots_main": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "EXPERT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 1470,
+          "acceptance_rate": 0.588,
+          "avg_reward": 1.0,
+          "total_reward": 1470.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 52,
+              "acceptance_rate": 0.577,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 203,
+              "acceptance_rate": 0.621,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "COMPETENT",
+              "to": "EXPERT",
+              "at_proposal": 533,
+              "acceptance_rate": 0.6,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "noisy": {
+          "name": "noisy",
+          "domain": "bandit",
+          "description": "",
+          "phase": "JOURNEYMAN",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 939,
+          "acceptance_rate": 0.3756,
+          "avg_reward": 0.5698,
+          "total_reward": 535.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 51,
+              "acceptance_rate": 0.392,
+              "avg_reward": 0.5
+            }
+          ]
+        },
+        "random": {
+          "name": "random",
+          "domain": "bandit",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 91,
+          "acceptance_rate": 0.0364,
+          "avg_reward": -0.5385,
+          "total_reward": -49.0,
+          "phase_history": []
+        }
+      },
+      "snapshots_probe": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "INDEPENDENT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 2500,
+          "acceptance_rate": 1.0,
+          "avg_reward": 1.0,
+          "total_reward": 2500.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 50,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 200,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "COMPETENT",
+              "to": "EXPERT",
+              "at_proposal": 500,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "EXPERT",
+              "to": "INDEPENDENT",
+              "at_proposal": 1000,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "abstain": {
+          "name": "abstain",
+          "domain": "probe",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 0,
+          "proposals_accepted": 0,
+          "acceptance_rate": 0.0,
+          "avg_reward": 0.0,
+          "total_reward": 0.0,
+          "phase_history": []
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "verdict": {
+        "P1_probe_oracle_independent_by_1000": true,
+        "P2_phase_order_oracle_ge_noisy_gt_random": false,
+        "P2b_reward_order_oracle_gt_noisy_gt_random": true,
+        "P3_random_apprentice_or_journeyman": true,
+        "P4_all_transitions_gate_compliant": true,
+        "P5_abstain_never_accepted": true,
+        "P5b_abstain_semantics_clean": true,
+        "P5b_abstain_proposals_made": 0,
+        "final_phases": {
+          "main.oracle": "JOURNEYMAN",
+          "main.noisy": "COMPETENT",
+          "main.random": "APPRENTICE",
+          "probe.oracle": "INDEPENDENT",
+          "probe.abstain": "APPRENTICE"
+        }
+      },
+      "snapshots_main": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "JOURNEYMAN",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 1232,
+          "acceptance_rate": 0.4928,
+          "avg_reward": 1.0,
+          "total_reward": 1232.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 50,
+              "acceptance_rate": 0.48,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "noisy": {
+          "name": "noisy",
+          "domain": "bandit",
+          "description": "",
+          "phase": "COMPETENT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 1221,
+          "acceptance_rate": 0.4884,
+          "avg_reward": 0.6134,
+          "total_reward": 749.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 51,
+              "acceptance_rate": 0.51,
+              "avg_reward": 0.3846
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 201,
+              "acceptance_rate": 0.507,
+              "avg_reward": 0.4902
+            }
+          ]
+        },
+        "random": {
+          "name": "random",
+          "domain": "bandit",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 47,
+          "acceptance_rate": 0.0188,
+          "avg_reward": -0.617,
+          "total_reward": -29.0,
+          "phase_history": []
+        }
+      },
+      "snapshots_probe": {
+        "oracle": {
+          "name": "oracle",
+          "domain": "bandit",
+          "description": "",
+          "phase": "INDEPENDENT",
+          "enabled": true,
+          "proposals_made": 2500,
+          "proposals_accepted": 2500,
+          "acceptance_rate": 1.0,
+          "avg_reward": 1.0,
+          "total_reward": 2500.0,
+          "phase_history": [
+            {
+              "from": "APPRENTICE",
+              "to": "JOURNEYMAN",
+              "at_proposal": 50,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 200,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "COMPETENT",
+              "to": "EXPERT",
+              "at_proposal": 500,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            },
+            {
+              "from": "EXPERT",
+              "to": "INDEPENDENT",
+              "at_proposal": 1000,
+              "acceptance_rate": 1.0,
+              "avg_reward": 1.0
+            }
+          ]
+        },
+        "abstain": {
+          "name": "abstain",
+          "domain": "probe",
+          "description": "",
+          "phase": "APPRENTICE",
+          "enabled": true,
+          "proposals_made": 0,
+          "proposals_accepted": 0,
+          "acceptance_rate": 0.0,
+          "avg_reward": 0.0,
+          "total_reward": 0.0,
+          "phase_history": []
+        }
+      }
+    }
+  ]
+}

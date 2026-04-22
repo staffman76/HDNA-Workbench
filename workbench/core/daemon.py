@@ -195,6 +195,10 @@ class Coordinator:
         self.decisions_made: int = 0
         self._decision_log: list = []
         self._log_capacity: int = 1000
+        # Names of daemons that actually produced a proposal in the most
+        # recent collect_proposals() call. record_outcome() uses this so
+        # abstainers are not charged with a "made proposal".
+        self._last_proposers: set[str] = set()
 
     def register(self, daemon: Daemon):
         """Add a daemon to the coordinator."""
@@ -208,6 +212,7 @@ class Coordinator:
                           rng: np.random.Generator = None) -> list:
         """Ask all enabled daemons for proposals."""
         proposals = []
+        self._last_proposers = set()
         for daemon in self.daemons.values():
             if not daemon.enabled:
                 continue
@@ -215,12 +220,15 @@ class Coordinator:
                 proposal = daemon.reason(state, features, rng)
                 if proposal is not None:
                     proposals.append(proposal)
+                    self._last_proposers.add(daemon.name)
             except Exception as e:
-                # Daemons should not crash the system
+                # Daemons should not crash the system. A crash still counts
+                # as participation (the daemon tried), so add to proposers.
                 proposals.append(Proposal(
                     action=None, confidence=0.0,
                     reasoning=f"ERROR: {e}", source=daemon.name,
                 ))
+                self._last_proposers.add(daemon.name)
         return proposals
 
     def select(self, proposals: list, brain_q_values: np.ndarray = None,
@@ -282,16 +290,23 @@ class Coordinator:
         return selected
 
     def record_outcome(self, proposal: Proposal, reward: float):
-        """Propagate outcome back to the daemon that made the proposal."""
+        """Propagate outcome back to the daemon that made the proposal.
+
+        Only daemons that actually proposed this round are charged with a
+        non-selection outcome. Abstaining daemons (reason() returned None)
+        are not counted as having made a proposal — otherwise their
+        proposals_made would inflate and make phase thresholds meaningless.
+        """
         if proposal.source in self.daemons:
             daemon = self.daemons[proposal.source]
             daemon.record_outcome(accepted=True, reward=reward)
             daemon.advance_phase()
 
-        # Record outcome for non-selected daemons too
-        for name, daemon in self.daemons.items():
-            if name != proposal.source:
-                daemon.record_outcome(accepted=False, reward=0.0)
+        # Record non-selection only for the other daemons that actually
+        # proposed this round.
+        for name in self._last_proposers:
+            if name != proposal.source and name in self.daemons:
+                self.daemons[name].record_outcome(accepted=False, reward=0.0)
 
     def snapshot(self) -> dict:
         """Full coordinator state."""

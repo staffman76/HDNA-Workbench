@@ -11,8 +11,9 @@ A sequence of empirical tests targeting specific load-bearing claims in `ARCHITE
 | 3 | [gate_specialization/](gate_specialization/) | `ControlNetwork` partitions neurons across tasks | ✅ **Strong pass** after wiring | ~30 lines |
 | 4 | [expert_routing/](expert_routing/) | `RoutedExpertMLP` produces interpretable per-token specialization | ✅ **Qualified pass** (no fix needed) | 0 lines |
 | 5 | [shadow_graduation/](shadow_graduation/) | Two-tier `FRESH → LEARNING → GRADUATED → MASTERED` progression with stress-gated demotion | ✅ **Pass** after 3 bug fixes | ~20 lines |
+| 6 | [daemon_phases/](daemon_phases/) | `Daemon.advance_phase` quality-gated `APPRENTICE → INDEPENDENT` progression | ✅ **Qualified pass** after abstention fix | ~10 lines |
 
-**Cumulative diff**: five experiments, ten files touched in `workbench/core/`, ~230 lines of fixes, ~45 plots, ~6500 lines of experiment code + results JSON.
+**Cumulative diff**: six experiments, eleven files touched in `workbench/core/`, ~240 lines of fixes, ~47 plots, ~6800 lines of experiment code + results JSON.
 
 ## The pattern across all five
 
@@ -23,8 +24,9 @@ Every claim tested was **substantively correct** — the architecture's underlyi
 - **gate specialization**: `GateNetwork.backward()` was implemented correctly, but **nothing ever called it** — the training signal never reached the gate weights. Three integration edits fixed it.
 - **expert routing**: no fix needed; moderate-but-real specialization emerged organically. Magnitudes would likely sharpen with longer training.
 - **shadow graduation**: three separate bugs in `shadow.py` + `fast.py` — `fast_correct` never incremented, wrong denominator for `fast_accuracy`, plain ReLU in `fast_forward` vs leaky ReLU in the slow path. The last one caused fast-vs-shadow argmax disagreement on 42% of inputs; after the fix, they match to 1.3e-15.
+- **daemon phases**: `Coordinator.record_outcome` iterated over every registered daemon — so an abstaining daemon (`reason()` returned `None`) still accumulated `proposals_made` per round. Tracking the actual proposers in `collect_proposals` and using that set in `record_outcome` fixed it.
 
-None of the five tests found anything fundamentally broken in the architectural design. Every failure had a targeted fix of a few to a few dozen lines.
+None of the six tests found anything fundamentally broken in the architectural design. Every failure had a targeted fix of a few to a few dozen lines.
 
 ## Headline numbers (after fixes)
 
@@ -86,6 +88,19 @@ Single seed, 800 steps on quadrant classification:
 | `fast_correct = 0` (never incremented) | `fast_correct` tracked correctly |
 | Fast/shadow argmax agreement: 57.8% | Fast/shadow output parity: 200/200 exact match, max diff 1.3e-15 |
 
+### 6. Daemon phase progression
+Contextual bandit, 2500 rounds, seeds `{0, 1, 2}`. Probe coordinator (oracle in isolation) and main coordinator (oracle + noisy + random).
+
+| coordinator | daemon | final phase (per seed) | avg_reward | acceptance_rate |
+|:--|:--|:--|---:|---:|
+| probe | oracle  | `INDEPENDENT` × 3 | +1.000 | 1.000 |
+| probe | abstain | `APPRENTICE` × 3 (`made = 0`) | — | 0.000 |
+| main  | oracle  | `COMPETENT`, `EXPERT`, `JOURNEYMAN` | +1.000 | 0.547 |
+| main  | noisy   | `JOURNEYMAN`, `JOURNEYMAN`, `COMPETENT` | +0.613 | 0.424 |
+| main  | random  | `APPRENTICE` × 3 | −0.508 | 0.029 |
+
+All 28 recorded transitions (across 6 coordinator-seeds) met their documented gates. Isolated progression hits each gate at the exact minimum proposal count. Under pure-confidence competition, absolute quality is strictly ordered every seed (`avg_reward` oracle > noisy > random 3/3), but phase ceiling inverts on 1/3 seeds when noisy and oracle confidence distributions overlap — a property of confidence-only selection, scheduled for mitigation by scaffold-decay validation (claim #4).
+
 ## Known gaps not yet closed
 
 Documented in individual experiment READMEs, preserved here as a single punch list:
@@ -99,10 +114,9 @@ Documented in individual experiment READMEs, preserved here as a single punch li
 
 The validation campaign hit the top-priority load-bearing claims. Still outstanding:
 
-- **Daemon phase progression** (Apprentice → Journeyman → Competent → Expert → Independent). The quality-gated advancement mechanism.
 - **Curriculum mastery and catastrophic-forgetting detection.** `Curriculum.progress` transitions and the forgetting flag.
 - **Stress monitor → homeostasis daemon loop.** Does the system prune dead neurons / spawn replacements as intended?
-- **Scaffold decay in the coordinator.** The transition from "favor high-confidence proposals" to "trust brain Q-values" over time.
+- **Scaffold decay in the coordinator.** The transition from "favor high-confidence proposals" to "trust brain Q-values" over time. Directly relevant to the phase-ceiling non-determinism surfaced in experiment 6 — the decay mechanism is what's supposed to mitigate it.
 
 Given the pattern so far, it's worth expecting each to reveal a fixable integration gap or two, rather than a fundamental failure.
 
@@ -127,6 +141,10 @@ python -m experiments.expert_routing.multi_seed
 
 # Shadow graduation (~5 s on CPU)
 python -m experiments.shadow_graduation.run
+
+# Daemon phase progression (~5 s per seed on CPU)
+python -m experiments.daemon_phases.run
+python -m experiments.daemon_phases.multi_seed
 ```
 
 Each experiment's results land under its own `results/` directory; plots in `plots/`. Every run also writes a `report.json` with full config, training curves, and aggregate metrics so downstream tooling can pick up the numbers without re-running.
