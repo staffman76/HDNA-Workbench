@@ -99,7 +99,11 @@ def fast_forward(fast_net: FastHDNA, inputs: np.ndarray,
 
     for i, (matrix, bias) in enumerate(zip(fast_net.layer_matrices, fast_net.layer_biases)):
         x = matrix @ x + bias
-        x = np.maximum(0, x)  # ReLU
+        # Leaky ReLU with 0.01 slope, matching HDNANetwork.forward.
+        # The slow path never returns strictly zero for small-negative inputs
+        # so plain ReLU here caused the compiled fast path to disagree on
+        # predictions where all pre-activations sat near zero.
+        x = np.where(x > 0, x, x * 0.01)
 
         # Apply gate if provided
         if gates is not None and i < len(gates):

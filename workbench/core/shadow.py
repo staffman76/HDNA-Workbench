@@ -65,8 +65,17 @@ class ShadowHDNA:
         self.inputs_seen = 0
         self.shadow_correct = 0
         self.fast_correct = 0
+        # How many predictions have been served by the fast path since the
+        # most recent graduation. Reset whenever we (re-)compile the fast
+        # net. Paired with fast_correct to compute fast_accuracy honestly
+        # regardless of oscillation history.
+        self.fast_served_count = 0
         self.total_reward = 0.0
         self._recent_rewards = []
+        # Source of the most recent prediction ("shadow" | "fast" | None).
+        # record_outcome() uses this to attribute correctness to the right
+        # counter when the fast path is serving.
+        self._last_source = None
 
     def predict(self, features: np.ndarray,
                 rng: np.random.Generator = None) -> tuple:
@@ -90,6 +99,7 @@ class ShadowHDNA:
             # Use fast path
             output, layer_acts, _ = fast_forward(self.fast_net, features, gates)
             source = "fast"
+            self.fast_served_count += 1
 
             # Shadow learning (at sample rate)
             if r.random() < self.sample_rate:
@@ -100,6 +110,8 @@ class ShadowHDNA:
             output = self.hdna_net.forward(features, gates)
             source = "shadow"
             layer_acts = None
+
+        self._last_source = source
 
         # Build audit record
         if len(output) > 0:
@@ -124,6 +136,8 @@ class ShadowHDNA:
 
         if correct:
             self.shadow_correct += 1
+            if self._last_source == "fast":
+                self.fast_correct += 1
 
         self.audit.record_outcome(self.inputs_seen, correct, reward)
         self._check_level_transitions()
@@ -144,11 +158,17 @@ class ShadowHDNA:
                 self.fast_net = compile_network(self.hdna_net)
                 self.level = Level.GRADUATED
                 self.fast_correct = 0
+                self.fast_served_count = 0
 
         elif self.level == Level.GRADUATED:
-            # Check if we should master or degrade
-            if self.inputs_seen > self.GRAD_MIN_INPUTS + 100:
-                fast_accuracy = (self.fast_correct / max(1, self.inputs_seen - self.GRAD_MIN_INPUTS))
+            # Wait until the fast path has served enough predictions to
+            # compute a meaningful accuracy — not just until inputs_seen
+            # crosses a threshold. Previously this fired on every input
+            # past GRAD_MIN_INPUTS + 100, which (because fast_correct was
+            # never incremented) caused permanent GRADUATED<->LEARNING
+            # oscillation and made MASTERED unreachable.
+            if self.fast_served_count >= 100:
+                fast_accuracy = self.fast_correct / self.fast_served_count
                 if fast_accuracy < self.GRAD_DEGRADE_THRESHOLD:
                     # Degrade back to learning
                     self.level = Level.LEARNING
