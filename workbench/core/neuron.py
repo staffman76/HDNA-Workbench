@@ -257,6 +257,10 @@ class HDNANetwork:
         """
         # Current activations for THIS forward pass
         current_acts = {}
+        # Pre-gate layer activations, stored so Brain.learn can compute
+        # d(Q)/d(gate_value) = neuron_error * pre_gate_activation when a
+        # ControlNetwork is being trained alongside the main net.
+        pre_gate_acts = {}
 
         for layer_idx in range(1, self.num_layers):
             layer_neurons = self.get_layer_neurons(layer_idx)
@@ -292,6 +296,7 @@ class HDNANetwork:
             if gates is not None and layer_idx - 1 < len(gates):
                 gate = gates[layer_idx - 1]
                 if len(gate) == len(layer_acts):
+                    pre_gate_acts[layer_idx] = layer_acts.copy()
                     layer_acts = layer_acts * gate
                     for i, neuron in enumerate(layer_neurons):
                         current_acts[neuron.neuron_id] = layer_acts[i]
@@ -299,6 +304,7 @@ class HDNANetwork:
         # Store for brain.learn()
         self._last_activations = current_acts
         self._last_inputs = inputs
+        self._last_pre_gate_acts = pre_gate_acts
 
         # Return output layer activations
         output_neurons = self.get_layer_neurons(self.num_layers - 1)

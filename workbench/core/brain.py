@@ -32,7 +32,8 @@ class Brain:
     def __init__(self, net: HDNANetwork, epsilon: float = 0.3,
                  epsilon_decay: float = 0.999, epsilon_min: float = 0.01,
                  learning_rate: float = 0.01, gamma: float = 0.99,
-                 gradient_clip: float = 5.0, weight_decay: float = 0.001):
+                 gradient_clip: float = 5.0, weight_decay: float = 0.001,
+                 control_net=None, gate_lr: float = None):
         self.net = net
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
@@ -41,12 +42,23 @@ class Brain:
         self.gamma = gamma
         self.gradient_clip = gradient_clip
         self.weight_decay = weight_decay
+        # Optional ControlNetwork: if present, forward passes are gated and
+        # learn() also updates the gate weights via the same TD signal.
+        self.control_net = control_net
+        self.gate_lr = gate_lr if gate_lr is not None else learning_rate
         self.episodes = 0
         self.total_reward = 0.0
         self._reward_history = []
 
     def get_q_values(self, features: np.ndarray) -> np.ndarray:
-        """Compute Q-values by running features through the HDNA network."""
+        """Compute Q-values by running features through the HDNA network.
+
+        When a ControlNetwork is attached, it produces per-layer gate masks
+        from the features and those masks modulate hidden activations.
+        """
+        if self.control_net is not None:
+            gates = self.control_net.forward(features)
+            return self.net.forward(features, gates=gates)
         return self.net.forward(features)
 
     def select_action(self, features: np.ndarray,
@@ -170,6 +182,30 @@ class Brain:
                     # Bias update with decay
                     neuron.bias += self.lr * np.clip(error, -1.0, 1.0) * 0.1
                     neuron.bias *= (1.0 - self.weight_decay)
+
+        # Gate updates: if a ControlNetwork is attached, propagate the same
+        # TD-error signal through the gate weights. For a gated neuron with
+        # post_gate_act = pre_gate_act * gate_value, we have
+        #   d(Q)/d(gate_value) = neuron_error * pre_gate_act
+        # gate.backward() uses gradient DESCENT on its internal weights, but
+        # the existing brain loop does ASCENT on Q (it pushes Q_predicted
+        # toward td_target when error > 0). To stay consistent we negate the
+        # per-gate gradient passed to gate.backward().
+        if self.control_net is not None:
+            pre_gate_acts = getattr(self.net, '_last_pre_gate_acts', {})
+            for layer_idx, pre_act in pre_gate_acts.items():
+                gate_idx = layer_idx - 1  # gates are indexed over hidden layers
+                if gate_idx >= len(self.control_net.gates):
+                    continue
+                layer_neurons = self.net.get_layer_neurons(layer_idx)
+                if len(layer_neurons) != len(pre_act):
+                    continue
+                grad_gate = np.zeros(len(layer_neurons))
+                for i, neuron in enumerate(layer_neurons):
+                    err = neuron_errors.get(neuron.neuron_id, 0.0)
+                    grad_gate[i] = -err * pre_act[i]
+                grad_gate = np.clip(grad_gate, -self.gradient_clip, self.gradient_clip)
+                self.control_net.gates[gate_idx].backward(grad_gate, lr=self.gate_lr)
 
         self.net._index_dirty = True
 
