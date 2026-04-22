@@ -127,7 +127,20 @@ class Brain:
         for layer_idx in range(self.net.num_layers - 1, 0, -1):
             layer_neurons = self.net.get_layer_neurons(layer_idx)
 
-            for neuron in layer_neurons:
+            # If a ControlNetwork is gating this layer, every local gradient
+            # computation (weight updates and upstream error propagation) also
+            # needs to be scaled by d(post_gate_act)/d(pre_gate_act) = gate,
+            # because the error coming IN to this neuron lives on post_gate_act
+            # while the weights, routing strengths, and upstream activations
+            # all live on pre_gate_act.
+            gate_values_this_layer = None
+            if (self.control_net is not None
+                    and 0 <= layer_idx - 1 < len(self.control_net.gates)):
+                last_gate_output = self.control_net.gates[layer_idx - 1]._last_output
+                if last_gate_output is not None and len(last_gate_output) == len(layer_neurons):
+                    gate_values_this_layer = last_gate_output
+
+            for i, neuron in enumerate(layer_neurons):
                 nid = neuron.neuron_id
                 error = neuron_errors.get(nid, 0.0)
                 if abs(error) < 1e-8:
@@ -137,6 +150,8 @@ class Brain:
                 # Leaky ReLU derivative: full gradient if active, 0.01x if negative
                 relu_grad = 1.0 if act > 0 else 0.01
                 error *= relu_grad
+                if gate_values_this_layer is not None:
+                    error *= float(gate_values_this_layer[i])
 
                 if layer_idx == 1:
                     # First hidden layer: update neuron weights

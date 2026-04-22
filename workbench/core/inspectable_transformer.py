@@ -305,15 +305,20 @@ class TaggedMultiHeadAttention(nn.Module):
         # Store for inspection
         self._last_attn_weights = attn_weights.detach()
 
-        # Build trace and update memory
+        # Build trace and update memory. Stats are averaged across the whole
+        # batch so the trace for a (B, T) input actually describes what the
+        # head did on all B sequences, not just sequence 0.
         head_traces = []
         with torch.no_grad():
+            eps = 1e-8
             for h in range(H):
-                hw = attn_weights[0, h]  # (T, T) - first batch item
-                eps = 1e-8
+                hw = attn_weights[:, h]  # (B, T, T)
+                # Entropy and sharpness per (B, T) query row, then mean.
                 entropy = float(-(hw * (hw + eps).log()).sum(dim=-1).mean())
                 sharpness = float(hw.max(dim=-1).values.mean())
-                top_pos = hw.mean(dim=0).topk(min(3, T)).indices.tolist()
+                # Most-attended keys across the whole (B, T) query pool.
+                avg_attn = hw.mean(dim=(0, 1))  # (T,)
+                top_pos = avg_attn.topk(min(3, T)).indices.tolist()
                 gate_val = float(gates[h])
 
                 self.head_memories[h].record(entropy, sharpness, top_pos, seq_len=T)
@@ -424,20 +429,29 @@ class RoutedExpertMLP(nn.Module):
             # Fast path: skip .tolist() syncs and Python-side usage counting.
             return output, None
 
-        # Build trace
+        # Build trace. Keep all batch items so downstream analysis sees what
+        # happened across the whole input, not just sequence 0. Shapes:
+        #   chosen_expert  : list of length B, each entry a list of length T,
+        #                    each entry a list of top_k int expert indices.
+        #   routing_weights: same outer shape, each innermost a list of length
+        #                    n_experts with the full softmax routing distribution.
         with torch.no_grad():
-            chosen = top_k_indices[0].tolist()  # first batch
-            weights = routing_weights[0].tolist()
+            chosen = top_k_indices.tolist()        # (B, T, top_k)
+            weights_full = routing_weights.tolist()  # (B, T, n_experts)
 
-            # Track usage
-            for token_experts in chosen:
-                for e in token_experts:
-                    self.expert_usage[e] += 1
+            # Aggregate expert usage across the whole batch.
+            for batch_item in chosen:
+                for token_experts in batch_item:
+                    for e in token_experts:
+                        self.expert_usage[e] += 1
 
             self._last_trace = ExpertTrace(
                 layer=0,
                 chosen_expert=chosen,
-                routing_weights=[[round(w, 4) for w in tw] for tw in weights],
+                routing_weights=[
+                    [[round(w, 4) for w in tw] for tw in seq]
+                    for seq in weights_full
+                ],
                 expert_names=self.expert_names,
             )
 
@@ -607,11 +621,14 @@ class InspectableTransformer(nn.Module):
                 if ht.active
             )
             total_heads = self.n_heads * self.n_layers
+            # chosen_expert shape is now (B, T, top_k). Flatten across all
+            # batches, positions, and top-k picks to count unique experts.
             experts_used = len(set(
                 e for lt in layer_traces
                 if lt.expert_trace
-                for token_experts in lt.expert_trace.chosen_expert
-                for e in (token_experts if isinstance(token_experts, list) else [token_experts])
+                for seq in lt.expert_trace.chosen_expert
+                for token_experts in seq
+                for e in token_experts
             ))
 
             trace = ForwardTrace(

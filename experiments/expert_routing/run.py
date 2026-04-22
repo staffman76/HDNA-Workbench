@@ -129,22 +129,24 @@ def collect_routing(
     for _ in range(n_chunks):
         x, _y = dataset.batch("val", 1, SEQ_LEN, device, g)  # (1, T)
         _logits, trace = model(x, return_trace=True)
-        input_chars = [dataset.itos[i] for i in x[0].tolist()]
-        for lt in trace.layer_traces:
-            et = lt.expert_trace
-            if et is None:
-                continue
-            # et.chosen_expert is a list of length T, each a list of top_k ints
-            # (we extract only the first batch item in the trace by design).
-            for pos, experts in enumerate(et.chosen_expert):
-                records.append({
-                    "layer": lt.layer_id,
-                    "pos": pos,
-                    "char": input_chars[pos],
-                    "category": char_category(input_chars[pos]),
-                    "experts": list(experts),
-                    "weights": [round(w, 4) for w in et.routing_weights[pos]],
-                })
+        B = x.size(0)
+        for b in range(B):
+            input_chars = [dataset.itos[i] for i in x[b].tolist()]
+            for lt in trace.layer_traces:
+                et = lt.expert_trace
+                if et is None:
+                    continue
+                # et.chosen_expert shape: (B, T, top_k). Iterate the b-th
+                # sequence.
+                for pos, experts in enumerate(et.chosen_expert[b]):
+                    records.append({
+                        "layer": lt.layer_id,
+                        "pos": pos,
+                        "char": input_chars[pos],
+                        "category": char_category(input_chars[pos]),
+                        "experts": list(experts),
+                        "weights": [round(w, 4) for w in et.routing_weights[b][pos]],
+                    })
     return records
 
 
@@ -280,12 +282,10 @@ def plot_top_expert_concentration(hist, n_experts, out_path):
     plt.close(fig)
 
 
-def main() -> int:
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-    torch.manual_seed(SEED)
+def run_one(seed: int, verbose: bool = True) -> dict:
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
+        torch.cuda.manual_seed_all(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dataset = load_char_dataset()
@@ -294,46 +294,36 @@ def main() -> int:
         d_model=D_MODEL, n_heads=N_HEADS, n_layers=N_LAYERS,
         n_experts=N_EXPERTS, d_ff=D_FF, max_seq_len=SEQ_LEN,
     ).to(device)
+    if verbose:
+        print(f"\n=== seed {seed} ===  device={device}  vocab={dataset.vocab_size}")
+    curve = train(model, dataset, device, TRAIN_STEPS, seed)
 
-    print(f"device={device}  vocab={dataset.vocab_size}  "
-          f"d={D_MODEL} n_layers={N_LAYERS} n_experts={N_EXPERTS} top_k={TOP_K}")
-
-    print("\ntraining...")
-    curve = train(model, dataset, device, TRAIN_STEPS, SEED)
-
-    print("\ncollecting routing decisions from held-out text...")
-    records = collect_routing(model, dataset, device, EVAL_CHUNKS, SEED)
-    print(f"  collected {len(records)} routing decisions "
-          f"across {N_LAYERS} layers")
-
-    cat_counts = Counter(r["category"] for r in records if r["layer"] == 0)
-    print("  category distribution (from layer 0 sample):")
-    for cat in CATEGORY_ORDER:
-        if cat in cat_counts:
-            pct = cat_counts[cat] / sum(cat_counts.values()) * 100
-            print(f"    {cat:20s}  {cat_counts[cat]:>6d}  ({pct:5.2f}%)")
-
+    records = collect_routing(model, dataset, device, EVAL_CHUNKS, seed)
     hist = compute_category_expert_hist(records, N_LAYERS, N_EXPERTS)
+    mi_per_layer = {l: compute_mutual_information(records, l, N_EXPERTS)
+                    for l in range(N_LAYERS)}
 
-    print("\nmutual information I(category; expert), per layer")
-    mi_per_layer = {}
-    for l in range(N_LAYERS):
-        mi = compute_mutual_information(records, l, N_EXPERTS)
-        mi_per_layer[l] = mi
-        print(f"  layer {l}  MI={mi['mutual_info_bits']:.4f} bits  "
-              f"norm_MI={mi['norm_mi']:.4f}  "
-              f"H(cat)={mi['h_cat']:.3f}  H(exp)={mi['h_exp']:.3f}")
+    if verbose:
+        for l in range(N_LAYERS):
+            print(f"  layer {l}: MI={mi_per_layer[l]['mutual_info_bits']:.4f} bits, "
+                  f"norm_MI={mi_per_layer[l]['norm_mi']:.4f}")
 
-    print("\nper-category top-expert concentration (by layer):")
-    for l in range(N_LAYERS):
-        print(f"  layer {l}")
-        for cat in CATEGORY_ORDER:
-            probs = hist[l].get(cat)
-            if not probs:
-                continue
-            top_e = int(np.argmax(probs))
-            top_p = max(probs)
-            print(f"    {cat:20s}  top=e{top_e}  p={top_p:.3f}")
+    return {
+        "seed": seed,
+        "training_curve": curve,
+        "expert_hist_by_layer": {
+            str(l): {cat: probs for cat, probs in hist[l].items()}
+            for l in hist
+        },
+        "mutual_information": mi_per_layer,
+    }, hist
+
+
+def main() -> int:
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    result, hist = run_one(SEED)
 
     report = {
         "config": {
@@ -342,13 +332,7 @@ def main() -> int:
             "seq_len": SEQ_LEN, "steps": TRAIN_STEPS,
             "eval_chunks": EVAL_CHUNKS, "seed": SEED,
         },
-        "training_curve": curve,
-        "category_counts": dict(cat_counts),
-        "expert_hist_by_layer": {
-            str(l): {cat: probs for cat, probs in hist[l].items()}
-            for l in hist
-        },
-        "mutual_information": mi_per_layer,
+        **result,
     }
     with open(os.path.join(RESULTS_DIR, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
@@ -357,9 +341,6 @@ def main() -> int:
     plot_top_expert_concentration(
         hist, N_EXPERTS, os.path.join(PLOTS_DIR, "top_expert_concentration.png")
     )
-    print(f"\nwrote {RESULTS_DIR}/report.json")
-    print(f"wrote {PLOTS_DIR}/routing_heatmap.png")
-    print(f"wrote {PLOTS_DIR}/top_expert_concentration.png")
     return 0
 
 

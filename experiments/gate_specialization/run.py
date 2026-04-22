@@ -153,11 +153,8 @@ def plot_diff(profile_a, profile_b, out_path: str) -> None:
     plt.close(fig)
 
 
-def main() -> int:
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-
-    rng = np.random.default_rng(SEED)
+def run_one(seed: int, verbose: bool = True) -> dict:
+    rng = np.random.default_rng(seed)
     net = HDNANetwork(input_dim=INPUT_DIM, output_dim=OUTPUT_DIM,
                       hidden_dims=HIDDEN_DIMS, rng=rng)
     ctrl = ControlNetwork(input_dim=INPUT_DIM, hidden_dims=HIDDEN_DIMS, rng=rng)
@@ -167,44 +164,29 @@ def main() -> int:
         epsilon=0.5, epsilon_decay=0.9998, epsilon_min=0.02,
         learning_rate=0.05,
         gate_lr=0.1,
-        gamma=0.0,  # pure contextual-bandit — next state doesn't matter
+        gamma=0.0,
         gradient_clip=5.0,
         weight_decay=0.0005,
     )
 
-    print("BEFORE training: gate profiles")
-    profile_a_pre = gate_profile(ctrl, task_id=0, rng=np.random.default_rng(SEED + 1))
-    profile_b_pre = gate_profile(ctrl, task_id=1, rng=np.random.default_rng(SEED + 2))
-    for li, (pa, pb) in enumerate(zip(profile_a_pre, profile_b_pre)):
-        max_diff = np.abs(pa - pb).max()
-        print(f"  layer {li+1}  task_A_mean={pa.mean():.3f}  task_B_mean={pb.mean():.3f}  "
-              f"max|delta|={max_diff:.4f}")
-
-    print("\nTraining...")
+    if verbose:
+        print(f"\n=== seed {seed} ===\nTraining...")
     curve = train(brain, rng)
 
-    print("\nEvaluating...")
-    acc_a = eval_accuracy(brain, 0, np.random.default_rng(SEED + 10))
-    acc_b = eval_accuracy(brain, 1, np.random.default_rng(SEED + 11))
-    print(f"  accuracy task A = {acc_a:.3f}")
-    print(f"  accuracy task B = {acc_b:.3f}")
+    acc_a = eval_accuracy(brain, 0, np.random.default_rng(seed + 10))
+    acc_b = eval_accuracy(brain, 1, np.random.default_rng(seed + 11))
 
-    print("\nAFTER training: gate profiles")
-    profile_a = gate_profile(ctrl, task_id=0, rng=np.random.default_rng(SEED + 20))
-    profile_b = gate_profile(ctrl, task_id=1, rng=np.random.default_rng(SEED + 21))
+    profile_a = gate_profile(ctrl, task_id=0, rng=np.random.default_rng(seed + 20))
+    profile_b = gate_profile(ctrl, task_id=1, rng=np.random.default_rng(seed + 21))
 
     total_neurons = 0
     specialized = 0
-    for li, (pa, pb) in enumerate(zip(profile_a, profile_b)):
+    max_diffs_per_layer = []
+    for pa, pb in zip(profile_a, profile_b):
         diff = np.abs(pa - pb)
-        spec = int((diff > 0.05).sum())
         total_neurons += len(pa)
-        specialized += spec
-        print(f"  layer {li+1}  task_A_mean={pa.mean():.3f}  task_B_mean={pb.mean():.3f}  "
-              f"max|delta|={diff.max():.4f}  neurons_with_|delta|>0.05: {spec}/{len(pa)}")
-
-    # Additional useful check: for each neuron, is it "open for A, closed for B"
-    # or "open for B, closed for A"?
+        specialized += int((diff > 0.05).sum())
+        max_diffs_per_layer.append(float(diff.max()))
     task_a_preferred = 0
     task_b_preferred = 0
     for pa, pb in zip(profile_a, profile_b):
@@ -213,16 +195,9 @@ def main() -> int:
                 task_a_preferred += 1
             elif b_val - a_val > 0.05:
                 task_b_preferred += 1
-    print(f"\n  neurons preferring task A: {task_a_preferred}")
-    print(f"  neurons preferring task B: {task_b_preferred}")
-    print(f"  total specialized:         {specialized}/{total_neurons}")
 
-    report = {
-        "config": {
-            "input_dim": INPUT_DIM, "hidden_dims": HIDDEN_DIMS,
-            "output_dim": OUTPUT_DIM, "train_steps": TRAIN_STEPS,
-            "eval_samples": EVAL_SAMPLES, "seed": SEED,
-        },
+    result = {
+        "seed": seed,
         "training_curve": curve,
         "accuracy": {"task_A": acc_a, "task_B": acc_b},
         "gate_profiles": {
@@ -232,9 +207,32 @@ def main() -> int:
         "specialization": {
             "total_neurons": total_neurons,
             "specialized_count": specialized,
+            "specialized_frac": specialized / max(1, total_neurons),
             "task_a_preferred": task_a_preferred,
             "task_b_preferred": task_b_preferred,
+            "max_diffs_per_layer": max_diffs_per_layer,
         },
+    }
+    if verbose:
+        print(f"  acc task A={acc_a:.3f}  task B={acc_b:.3f}  "
+              f"specialized {specialized}/{total_neurons}  "
+              f"max|delta| per layer = {[round(d, 3) for d in max_diffs_per_layer]}")
+    return result, profile_a, profile_b
+
+
+def main() -> int:
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    result, profile_a, profile_b = run_one(SEED)
+
+    report = {
+        "config": {
+            "input_dim": INPUT_DIM, "hidden_dims": HIDDEN_DIMS,
+            "output_dim": OUTPUT_DIM, "train_steps": TRAIN_STEPS,
+            "eval_samples": EVAL_SAMPLES, "seed": SEED,
+        },
+        **result,
     }
     with open(os.path.join(RESULTS_DIR, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
