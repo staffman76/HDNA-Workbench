@@ -77,6 +77,12 @@ class Daemon:
                 return None  # abstain
     """
 
+    # Rolling window for demotion detection. Cumulative acceptance_rate and
+    # avg_reward only grow — they can mask recent quality collapse. The
+    # window tracks the most recent N (accepted, reward) outcomes so
+    # demote_phase() can react to realized recent performance.
+    RECENT_WINDOW = 100
+
     def __init__(self, name: str, domain: str = "general",
                  description: str = ""):
         self.name = name
@@ -88,6 +94,9 @@ class Daemon:
         self.total_reward = 0.0
         self.enabled = True
         self._phase_history: list = []
+        # (accepted: bool, reward: float) for most recent RECENT_WINDOW
+        # outcomes.
+        self._recent_outcomes: list = []
 
     def reason(self, state: Any, features: np.ndarray,
                rng: np.random.Generator = None) -> Optional[Proposal]:
@@ -109,6 +118,9 @@ class Daemon:
         if accepted:
             self.proposals_accepted += 1
             self.total_reward += reward
+        self._recent_outcomes.append((accepted, reward))
+        if len(self._recent_outcomes) > self.RECENT_WINDOW:
+            self._recent_outcomes.pop(0)
 
     @property
     def acceptance_rate(self) -> float:
@@ -121,6 +133,22 @@ class Daemon:
         if self.proposals_accepted == 0:
             return 0.0
         return self.total_reward / self.proposals_accepted
+
+    @property
+    def recent_acceptance_rate(self) -> float:
+        """Acceptance rate over the most recent RECENT_WINDOW outcomes."""
+        if not self._recent_outcomes:
+            return 0.0
+        return (sum(1 for a, _ in self._recent_outcomes if a)
+                / len(self._recent_outcomes))
+
+    @property
+    def recent_avg_reward(self) -> float:
+        """Average reward over recent accepted outcomes."""
+        accepted = [r for a, r in self._recent_outcomes if a]
+        if not accepted:
+            return 0.0
+        return sum(accepted) / len(accepted)
 
     def advance_phase(self) -> bool:
         """
@@ -153,6 +181,60 @@ class Daemon:
                 "at_proposal": self.proposals_made,
                 "acceptance_rate": round(self.acceptance_rate, 3),
                 "avg_reward": round(self.avg_reward, 4),
+                "direction": "promote",
+            })
+            return True
+        return False
+
+    # Hysteresis buffer: demotion fires only when recent metrics fall below
+    # the current phase's entry gate by this much. Keeps a daemon from
+    # flapping between adjacent phases on noisy data.
+    _DEMOTE_HYSTERESIS = 0.10
+
+    def demote_phase(self) -> bool:
+        """
+        Demote one phase if RECENT performance has collapsed below the
+        current phase's entry gate by the hysteresis buffer.
+
+        Uses the rolling window (recent_acceptance_rate /
+        recent_avg_reward) instead of the cumulative metrics — cumulative
+        can mask a late-stage quality collapse. Demotes by at most one
+        phase per call; repeated outcomes that keep recent metrics below
+        threshold will cascade across calls.
+
+        Returns True if a demotion occurred.
+        """
+        # Entry gates for each phase (the thresholds that advance INTO
+        # this phase from the one below). Demotion fires if recent metrics
+        # fall below entry_gate - hysteresis.
+        entry_gates = {
+            Phase.JOURNEYMAN:  (0.30, -999.0),
+            Phase.COMPETENT:   (0.50, 0.0),
+            Phase.EXPERT:      (0.60, 0.1),
+            Phase.INDEPENDENT: (0.70, 0.2),
+        }
+
+        if self.phase == Phase.APPRENTICE:
+            return False  # nowhere to demote
+        # Need a reasonably-filled window before trusting recent metrics.
+        if len(self._recent_outcomes) < self.RECENT_WINDOW // 2:
+            return False
+
+        min_acceptance, min_reward = entry_gates[self.phase]
+        acc_threshold = min_acceptance - self._DEMOTE_HYSTERESIS
+        rew_threshold = min_reward - self._DEMOTE_HYSTERESIS
+
+        if (self.recent_acceptance_rate < acc_threshold
+                or self.recent_avg_reward < rew_threshold):
+            old = self.phase
+            self.phase = Phase(self.phase - 1)
+            self._phase_history.append({
+                "from": old.name, "to": self.phase.name,
+                "at_proposal": self.proposals_made,
+                "recent_acceptance_rate":
+                    round(self.recent_acceptance_rate, 3),
+                "recent_avg_reward": round(self.recent_avg_reward, 4),
+                "direction": "demote",
             })
             return True
         return False
@@ -169,6 +251,8 @@ class Daemon:
             "proposals_accepted": self.proposals_accepted,
             "acceptance_rate": round(self.acceptance_rate, 4),
             "avg_reward": round(self.avg_reward, 4),
+            "recent_acceptance_rate": round(self.recent_acceptance_rate, 4),
+            "recent_avg_reward": round(self.recent_avg_reward, 4),
             "total_reward": round(self.total_reward, 4),
             "phase_history": self._phase_history,
         }
@@ -307,6 +391,14 @@ class Coordinator:
         for name in self._last_proposers:
             if name != proposal.source and name in self.daemons:
                 self.daemons[name].record_outcome(accepted=False, reward=0.0)
+
+        # After all outcomes are recorded, check each proposer for demotion.
+        # Demotion uses the rolling window, so it reacts to realized recent
+        # performance — a daemon that was promoted earlier but whose recent
+        # quality has collapsed gets walked back down.
+        for name in self._last_proposers:
+            if name in self.daemons:
+                self.daemons[name].demote_phase()
 
     def snapshot(self) -> dict:
         """Full coordinator state."""

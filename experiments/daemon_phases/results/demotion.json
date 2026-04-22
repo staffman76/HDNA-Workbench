@@ -1,0 +1,324 @@
+{
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "per_seed": [
+    {
+      "seed": 0,
+      "verdict": {
+        "D1_promoted_to_independent": true,
+        "D2_left_independent_after_collapse": true,
+        "D3_all_demotes_gate_compliant": true,
+        "D3_violations": [],
+        "D4_no_phase_skipped": true,
+        "D4_violations": [],
+        "D5_final_phase_low": true,
+        "D5_final_phase": "APPRENTICE",
+        "D6_monotonic_promotes_then_demotes": true
+      },
+      "final_phase": "APPRENTICE",
+      "phase_history_summary": [
+        "APPRENTICE->JOURNEYMAN (promote)",
+        "JOURNEYMAN->COMPETENT (promote)",
+        "COMPETENT->EXPERT (promote)",
+        "EXPERT->INDEPENDENT (promote)",
+        "INDEPENDENT->EXPERT (demote)",
+        "EXPERT->COMPETENT (demote)",
+        "COMPETENT->JOURNEYMAN (demote)",
+        "JOURNEYMAN->APPRENTICE (demote)"
+      ],
+      "final_snapshot": {
+        "name": "actor",
+        "domain": "bandit",
+        "description": "",
+        "phase": "APPRENTICE",
+        "enabled": true,
+        "proposals_made": 1400,
+        "proposals_accepted": 1200,
+        "acceptance_rate": 0.8571,
+        "avg_reward": 1.0,
+        "recent_acceptance_rate": 0.0,
+        "recent_avg_reward": 0.0,
+        "total_reward": 1200.0,
+        "phase_history": [
+          {
+            "from": "APPRENTICE",
+            "to": "JOURNEYMAN",
+            "at_proposal": 50,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "COMPETENT",
+            "at_proposal": 200,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "EXPERT",
+            "at_proposal": 500,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "INDEPENDENT",
+            "at_proposal": 1000,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "INDEPENDENT",
+            "to": "EXPERT",
+            "at_proposal": 1241,
+            "recent_acceptance_rate": 0.59,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "COMPETENT",
+            "at_proposal": 1251,
+            "recent_acceptance_rate": 0.49,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "JOURNEYMAN",
+            "at_proposal": 1261,
+            "recent_acceptance_rate": 0.39,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "APPRENTICE",
+            "at_proposal": 1281,
+            "recent_acceptance_rate": 0.19,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          }
+        ]
+      }
+    },
+    {
+      "seed": 1,
+      "verdict": {
+        "D1_promoted_to_independent": true,
+        "D2_left_independent_after_collapse": true,
+        "D3_all_demotes_gate_compliant": true,
+        "D3_violations": [],
+        "D4_no_phase_skipped": true,
+        "D4_violations": [],
+        "D5_final_phase_low": true,
+        "D5_final_phase": "APPRENTICE",
+        "D6_monotonic_promotes_then_demotes": true
+      },
+      "final_phase": "APPRENTICE",
+      "phase_history_summary": [
+        "APPRENTICE->JOURNEYMAN (promote)",
+        "JOURNEYMAN->COMPETENT (promote)",
+        "COMPETENT->EXPERT (promote)",
+        "EXPERT->INDEPENDENT (promote)",
+        "INDEPENDENT->EXPERT (demote)",
+        "EXPERT->COMPETENT (demote)",
+        "COMPETENT->JOURNEYMAN (demote)",
+        "JOURNEYMAN->APPRENTICE (demote)"
+      ],
+      "final_snapshot": {
+        "name": "actor",
+        "domain": "bandit",
+        "description": "",
+        "phase": "APPRENTICE",
+        "enabled": true,
+        "proposals_made": 1400,
+        "proposals_accepted": 1200,
+        "acceptance_rate": 0.8571,
+        "avg_reward": 1.0,
+        "recent_acceptance_rate": 0.0,
+        "recent_avg_reward": 0.0,
+        "total_reward": 1200.0,
+        "phase_history": [
+          {
+            "from": "APPRENTICE",
+            "to": "JOURNEYMAN",
+            "at_proposal": 50,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "COMPETENT",
+            "at_proposal": 200,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "EXPERT",
+            "at_proposal": 500,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "INDEPENDENT",
+            "at_proposal": 1000,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "INDEPENDENT",
+            "to": "EXPERT",
+            "at_proposal": 1241,
+            "recent_acceptance_rate": 0.59,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "COMPETENT",
+            "at_proposal": 1251,
+            "recent_acceptance_rate": 0.49,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "JOURNEYMAN",
+            "at_proposal": 1261,
+            "recent_acceptance_rate": 0.39,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "APPRENTICE",
+            "at_proposal": 1281,
+            "recent_acceptance_rate": 0.19,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          }
+        ]
+      }
+    },
+    {
+      "seed": 2,
+      "verdict": {
+        "D1_promoted_to_independent": true,
+        "D2_left_independent_after_collapse": true,
+        "D3_all_demotes_gate_compliant": true,
+        "D3_violations": [],
+        "D4_no_phase_skipped": true,
+        "D4_violations": [],
+        "D5_final_phase_low": true,
+        "D5_final_phase": "APPRENTICE",
+        "D6_monotonic_promotes_then_demotes": true
+      },
+      "final_phase": "APPRENTICE",
+      "phase_history_summary": [
+        "APPRENTICE->JOURNEYMAN (promote)",
+        "JOURNEYMAN->COMPETENT (promote)",
+        "COMPETENT->EXPERT (promote)",
+        "EXPERT->INDEPENDENT (promote)",
+        "INDEPENDENT->EXPERT (demote)",
+        "EXPERT->COMPETENT (demote)",
+        "COMPETENT->JOURNEYMAN (demote)",
+        "JOURNEYMAN->APPRENTICE (demote)"
+      ],
+      "final_snapshot": {
+        "name": "actor",
+        "domain": "bandit",
+        "description": "",
+        "phase": "APPRENTICE",
+        "enabled": true,
+        "proposals_made": 1400,
+        "proposals_accepted": 1200,
+        "acceptance_rate": 0.8571,
+        "avg_reward": 1.0,
+        "recent_acceptance_rate": 0.0,
+        "recent_avg_reward": 0.0,
+        "total_reward": 1200.0,
+        "phase_history": [
+          {
+            "from": "APPRENTICE",
+            "to": "JOURNEYMAN",
+            "at_proposal": 50,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "COMPETENT",
+            "at_proposal": 200,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "EXPERT",
+            "at_proposal": 500,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "INDEPENDENT",
+            "at_proposal": 1000,
+            "acceptance_rate": 1.0,
+            "avg_reward": 1.0,
+            "direction": "promote"
+          },
+          {
+            "from": "INDEPENDENT",
+            "to": "EXPERT",
+            "at_proposal": 1241,
+            "recent_acceptance_rate": 0.59,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "EXPERT",
+            "to": "COMPETENT",
+            "at_proposal": 1251,
+            "recent_acceptance_rate": 0.49,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "COMPETENT",
+            "to": "JOURNEYMAN",
+            "at_proposal": 1261,
+            "recent_acceptance_rate": 0.39,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          },
+          {
+            "from": "JOURNEYMAN",
+            "to": "APPRENTICE",
+            "at_proposal": 1281,
+            "recent_acceptance_rate": 0.19,
+            "recent_avg_reward": 1.0,
+            "direction": "demote"
+          }
+        ]
+      }
+    }
+  ]
+}

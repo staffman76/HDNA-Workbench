@@ -9,14 +9,14 @@
       "final_phase_idx": {
         "values": [
           2,
-          3,
+          2,
           1
         ],
-        "mean": 2,
-        "stdev": 1.0,
+        "mean": 1.6666666666666667,
+        "stdev": 0.5773502691896257,
         "names": [
           "COMPETENT",
-          "EXPERT",
+          "COMPETENT",
           "JOURNEYMAN"
         ]
       },
@@ -44,14 +44,14 @@
         "values": [
           1,
           1,
-          2
+          1
         ],
-        "mean": 1.3333333333333333,
-        "stdev": 0.5773502691896257,
+        "mean": 1,
+        "stdev": 0.0,
         "names": [
           "JOURNEYMAN",
           "JOURNEYMAN",
-          "COMPETENT"
+          "JOURNEYMAN"
         ]
       },
       "acceptance_rate": {
@@ -178,7 +178,7 @@
   },
   "pass_counts": {
     "P1_probe_oracle_independent_by_1000": 3,
-    "P2_phase_order_oracle_ge_noisy_gt_random": 2,
+    "P2_phase_order_oracle_ge_noisy_gt_random": 3,
     "P2b_reward_order_oracle_gt_noisy_gt_random": 3,
     "P3_random_apprentice_or_journeyman": 3,
     "P4_all_transitions_gate_compliant": 3,
@@ -216,6 +216,8 @@
           "proposals_accepted": 1398,
           "acceptance_rate": 0.5592,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 0.56,
+          "recent_avg_reward": 1.0,
           "total_reward": 1398.0,
           "phase_history": [
             {
@@ -223,14 +225,16 @@
               "to": "JOURNEYMAN",
               "at_proposal": 50,
               "acceptance_rate": 0.5,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 200,
               "acceptance_rate": 0.505,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             }
           ]
         },
@@ -244,6 +248,8 @@
           "proposals_accepted": 1023,
           "acceptance_rate": 0.4092,
           "avg_reward": 0.6559,
+          "recent_acceptance_rate": 0.41,
+          "recent_avg_reward": 0.561,
           "total_reward": 671.0,
           "phase_history": [
             {
@@ -251,7 +257,8 @@
               "to": "JOURNEYMAN",
               "at_proposal": 52,
               "acceptance_rate": 0.462,
-              "avg_reward": 0.8333
+              "avg_reward": 0.8333,
+              "direction": "promote"
             }
           ]
         },
@@ -265,6 +272,8 @@
           "proposals_accepted": 79,
           "acceptance_rate": 0.0316,
           "avg_reward": -0.3671,
+          "recent_acceptance_rate": 0.03,
+          "recent_avg_reward": 0.3333,
           "total_reward": -29.0,
           "phase_history": []
         }
@@ -280,6 +289,8 @@
           "proposals_accepted": 2500,
           "acceptance_rate": 1.0,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 1.0,
+          "recent_avg_reward": 1.0,
           "total_reward": 2500.0,
           "phase_history": [
             {
@@ -287,28 +298,32 @@
               "to": "JOURNEYMAN",
               "at_proposal": 50,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 200,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "COMPETENT",
               "to": "EXPERT",
               "at_proposal": 500,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "EXPERT",
               "to": "INDEPENDENT",
               "at_proposal": 1000,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             }
           ]
         },
@@ -322,6 +337,8 @@
           "proposals_accepted": 0,
           "acceptance_rate": 0.0,
           "avg_reward": 0.0,
+          "recent_acceptance_rate": 0.0,
+          "recent_avg_reward": 0.0,
           "total_reward": 0.0,
           "phase_history": []
         }
@@ -339,7 +356,7 @@
         "P5b_abstain_semantics_clean": true,
         "P5b_abstain_proposals_made": 0,
         "final_phases": {
-          "main.oracle": "EXPERT",
+          "main.oracle": "COMPETENT",
           "main.noisy": "JOURNEYMAN",
           "main.random": "APPRENTICE",
           "probe.oracle": "INDEPENDENT",
@@ -351,12 +368,14 @@
           "name": "oracle",
           "domain": "bandit",
           "description": "",
-          "phase": "EXPERT",
+          "phase": "COMPETENT",
           "enabled": true,
           "proposals_made": 2500,
           "proposals_accepted": 1470,
           "acceptance_rate": 0.588,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 0.66,
+          "recent_avg_reward": 1.0,
           "total_reward": 1470.0,
           "phase_history": [
             {
@@ -364,21 +383,32 @@
               "to": "JOURNEYMAN",
               "at_proposal": 52,
               "acceptance_rate": 0.577,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 203,
               "acceptance_rate": 0.621,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "COMPETENT",
               "to": "EXPERT",
               "at_proposal": 533,
               "acceptance_rate": 0.6,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
+            },
+            {
+              "from": "EXPERT",
+              "to": "COMPETENT",
+              "at_proposal": 1298,
+              "recent_acceptance_rate": 0.49,
+              "recent_avg_reward": 1.0,
+              "direction": "demote"
             }
           ]
         },
@@ -392,6 +422,8 @@
           "proposals_accepted": 939,
           "acceptance_rate": 0.3756,
           "avg_reward": 0.5698,
+          "recent_acceptance_rate": 0.33,
+          "recent_avg_reward": 0.4545,
           "total_reward": 535.0,
           "phase_history": [
             {
@@ -399,7 +431,8 @@
               "to": "JOURNEYMAN",
               "at_proposal": 51,
               "acceptance_rate": 0.392,
-              "avg_reward": 0.5
+              "avg_reward": 0.5,
+              "direction": "promote"
             }
           ]
         },
@@ -413,6 +446,8 @@
           "proposals_accepted": 91,
           "acceptance_rate": 0.0364,
           "avg_reward": -0.5385,
+          "recent_acceptance_rate": 0.01,
+          "recent_avg_reward": -1.0,
           "total_reward": -49.0,
           "phase_history": []
         }
@@ -428,6 +463,8 @@
           "proposals_accepted": 2500,
           "acceptance_rate": 1.0,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 1.0,
+          "recent_avg_reward": 1.0,
           "total_reward": 2500.0,
           "phase_history": [
             {
@@ -435,28 +472,32 @@
               "to": "JOURNEYMAN",
               "at_proposal": 50,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 200,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "COMPETENT",
               "to": "EXPERT",
               "at_proposal": 500,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "EXPERT",
               "to": "INDEPENDENT",
               "at_proposal": 1000,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             }
           ]
         },
@@ -470,6 +511,8 @@
           "proposals_accepted": 0,
           "acceptance_rate": 0.0,
           "avg_reward": 0.0,
+          "recent_acceptance_rate": 0.0,
+          "recent_avg_reward": 0.0,
           "total_reward": 0.0,
           "phase_history": []
         }
@@ -479,7 +522,7 @@
       "seed": 2,
       "verdict": {
         "P1_probe_oracle_independent_by_1000": true,
-        "P2_phase_order_oracle_ge_noisy_gt_random": false,
+        "P2_phase_order_oracle_ge_noisy_gt_random": true,
         "P2b_reward_order_oracle_gt_noisy_gt_random": true,
         "P3_random_apprentice_or_journeyman": true,
         "P4_all_transitions_gate_compliant": true,
@@ -488,7 +531,7 @@
         "P5b_abstain_proposals_made": 0,
         "final_phases": {
           "main.oracle": "JOURNEYMAN",
-          "main.noisy": "COMPETENT",
+          "main.noisy": "JOURNEYMAN",
           "main.random": "APPRENTICE",
           "probe.oracle": "INDEPENDENT",
           "probe.abstain": "APPRENTICE"
@@ -505,6 +548,8 @@
           "proposals_accepted": 1232,
           "acceptance_rate": 0.4928,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 0.46,
+          "recent_avg_reward": 1.0,
           "total_reward": 1232.0,
           "phase_history": [
             {
@@ -512,7 +557,8 @@
               "to": "JOURNEYMAN",
               "at_proposal": 50,
               "acceptance_rate": 0.48,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             }
           ]
         },
@@ -520,12 +566,14 @@
           "name": "noisy",
           "domain": "bandit",
           "description": "",
-          "phase": "COMPETENT",
+          "phase": "JOURNEYMAN",
           "enabled": true,
           "proposals_made": 2500,
           "proposals_accepted": 1221,
           "acceptance_rate": 0.4884,
           "avg_reward": 0.6134,
+          "recent_acceptance_rate": 0.52,
+          "recent_avg_reward": 0.5,
           "total_reward": 749.0,
           "phase_history": [
             {
@@ -533,14 +581,56 @@
               "to": "JOURNEYMAN",
               "at_proposal": 51,
               "acceptance_rate": 0.51,
-              "avg_reward": 0.3846
+              "avg_reward": 0.3846,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 201,
               "acceptance_rate": 0.507,
-              "avg_reward": 0.4902
+              "avg_reward": 0.4902,
+              "direction": "promote"
+            },
+            {
+              "from": "COMPETENT",
+              "to": "JOURNEYMAN",
+              "at_proposal": 940,
+              "recent_acceptance_rate": 0.39,
+              "recent_avg_reward": 0.6923,
+              "direction": "demote"
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 943,
+              "acceptance_rate": 0.501,
+              "avg_reward": 0.6102,
+              "direction": "promote"
+            },
+            {
+              "from": "COMPETENT",
+              "to": "JOURNEYMAN",
+              "at_proposal": 943,
+              "recent_acceptance_rate": 0.39,
+              "recent_avg_reward": 0.6923,
+              "direction": "demote"
+            },
+            {
+              "from": "JOURNEYMAN",
+              "to": "COMPETENT",
+              "at_proposal": 944,
+              "acceptance_rate": 0.501,
+              "avg_reward": 0.611,
+              "direction": "promote"
+            },
+            {
+              "from": "COMPETENT",
+              "to": "JOURNEYMAN",
+              "at_proposal": 1023,
+              "recent_acceptance_rate": 0.39,
+              "recent_avg_reward": 0.6923,
+              "direction": "demote"
             }
           ]
         },
@@ -554,6 +644,8 @@
           "proposals_accepted": 47,
           "acceptance_rate": 0.0188,
           "avg_reward": -0.617,
+          "recent_acceptance_rate": 0.02,
+          "recent_avg_reward": -1.0,
           "total_reward": -29.0,
           "phase_history": []
         }
@@ -569,6 +661,8 @@
           "proposals_accepted": 2500,
           "acceptance_rate": 1.0,
           "avg_reward": 1.0,
+          "recent_acceptance_rate": 1.0,
+          "recent_avg_reward": 1.0,
           "total_reward": 2500.0,
           "phase_history": [
             {
@@ -576,28 +670,32 @@
               "to": "JOURNEYMAN",
               "at_proposal": 50,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "JOURNEYMAN",
               "to": "COMPETENT",
               "at_proposal": 200,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "COMPETENT",
               "to": "EXPERT",
               "at_proposal": 500,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             },
             {
               "from": "EXPERT",
               "to": "INDEPENDENT",
               "at_proposal": 1000,
               "acceptance_rate": 1.0,
-              "avg_reward": 1.0
+              "avg_reward": 1.0,
+              "direction": "promote"
             }
           ]
         },
@@ -611,6 +709,8 @@
           "proposals_accepted": 0,
           "acceptance_rate": 0.0,
           "avg_reward": 0.0,
+          "recent_acceptance_rate": 0.0,
+          "recent_avg_reward": 0.0,
           "total_reward": 0.0,
           "phase_history": []
         }

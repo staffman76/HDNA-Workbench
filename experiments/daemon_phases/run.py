@@ -173,13 +173,33 @@ GATE_SPECS = {
 }
 
 
-def verify_transition(from_phase: Phase, proposals_made: int,
-                      acceptance_rate: float, avg_reward: float) -> bool:
-    """Check that this transition was actually gate-compliant."""
+def verify_promote(from_phase: Phase, proposals_made: int,
+                   acceptance_rate: float, avg_reward: float) -> bool:
+    """Check that a PROMOTE transition from `from_phase` was gate-compliant."""
     min_p, min_a, min_r = GATE_SPECS[from_phase]
     return (proposals_made >= min_p
             and acceptance_rate >= min_a
             and avg_reward >= min_r)
+
+
+# Entry gates for phases (for demotion compliance check).
+DEMOTE_ENTRY_GATES = {
+    Phase.JOURNEYMAN:  (0.30, -999.0),
+    Phase.COMPETENT:   (0.50, 0.0),
+    Phase.EXPERT:      (0.60, 0.1),
+    Phase.INDEPENDENT: (0.70, 0.2),
+}
+DEMOTE_HYSTERESIS = 0.10
+
+
+def verify_demote(from_phase: Phase, recent_acceptance: float,
+                  recent_avg_reward: float) -> bool:
+    """Check that a DEMOTE transition was justified by recent metrics."""
+    if from_phase not in DEMOTE_ENTRY_GATES:
+        return False  # can't demote out of APPRENTICE
+    min_a, min_r = DEMOTE_ENTRY_GATES[from_phase]
+    return (recent_acceptance < min_a - DEMOTE_HYSTERESIS
+            or recent_avg_reward < min_r - DEMOTE_HYSTERESIS)
 
 
 def run_coordinator(coord: Coordinator, env: BanditEnv, n_steps: int,
@@ -209,17 +229,27 @@ def run_coordinator(coord: Coordinator, env: BanditEnv, n_steps: int,
                 "avg_reward": round(d.avg_reward, 4),
             })
             if d.phase != prev_phase[name]:
-                gate_met = verify_transition(
-                    prev_phase[name], d.proposals_made,
-                    d.acceptance_rate, d.avg_reward,
-                )
+                is_promote = int(d.phase) > int(prev_phase[name])
+                if is_promote:
+                    gate_met = verify_promote(
+                        prev_phase[name], d.proposals_made,
+                        d.acceptance_rate, d.avg_reward,
+                    )
+                else:
+                    gate_met = verify_demote(
+                        prev_phase[name],
+                        d.recent_acceptance_rate, d.recent_avg_reward,
+                    )
                 transitions[name].append({
                     "step": step,
                     "from": prev_phase[name].name,
                     "to": d.phase.name,
+                    "direction": "promote" if is_promote else "demote",
                     "proposals_made": d.proposals_made,
                     "acceptance_rate": round(d.acceptance_rate, 4),
                     "avg_reward": round(d.avg_reward, 4),
+                    "recent_acceptance_rate": round(d.recent_acceptance_rate, 4),
+                    "recent_avg_reward": round(d.recent_avg_reward, 4),
                     "gate_met": gate_met,
                 })
                 prev_phase[name] = d.phase
