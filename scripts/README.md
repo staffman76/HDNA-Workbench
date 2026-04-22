@@ -5,7 +5,9 @@ sweep + TinyStories matched-baseline bench, and archives the artifacts.
 
 ## Launching on RunPod
 
-1. Deploy a new pod. Community Cloud A100 40GB is the sweet spot (~$0.50–1/hr).
+1. Deploy a new pod. **A100 80GB SXM** (community) is the recommended config
+   (~$1.50–2/hr). The defaults below assume 80GB VRAM; for a 40GB card set
+   `TS_D_MODEL=768 TS_BATCH_SIZE=48` and the script stays within limits.
    - Template: **RunPod PyTorch 2.x** (has Python + CUDA preinstalled).
    - Volume: at least 20GB for the TinyStories corpus + artifacts.
 2. Once the pod is running, open the web terminal and:
@@ -42,31 +44,37 @@ code edits.
 | `ARTIFACT_DIR` | `/workspace/artifacts` | where results land |
 | `SKIP_PARITY` | unset | `1` to skip scaling sweep |
 | `SKIP_TINYSTORIES` | unset | `1` to skip the bench |
-| `D_MODEL_SWEEP` | `384,512,768,1024` | parity sweep d_models (comma-separated) |
+| `D_MODEL_SWEEP` | `384,512,768,1024,1536,2048` | parity sweep d_models (comma-separated) |
 | `PARITY_N_LAYERS` | `6` | layers in parity sweep |
 | `PARITY_N_HEADS` | `8` | heads |
 | `PARITY_SEQ_LEN` | `256` | context length |
 | `PARITY_BATCH_SIZE` | `32` | batch size |
 | `PARITY_STEPS` | `1500` | optimizer steps per model |
-| `TS_D_MODEL` | `768` | TinyStories d_model |
-| `TS_N_LAYERS` | `8` | layers |
-| `TS_N_HEADS` | `12` | heads |
+| `TS_D_MODEL` | `1024` | TinyStories d_model |
+| `TS_N_LAYERS` | `12` | layers |
+| `TS_N_HEADS` | `16` | heads |
 | `TS_N_EXPERTS` | `4` | experts (inspectable only) |
-| `TS_BATCH_SIZE` | `64` | batch size |
+| `TS_BATCH_SIZE` | `96` | batch size |
 | `TS_SEQ_LEN` | `512` | context length |
-| `TS_STEPS` | `5000` | training steps |
+| `TS_STEPS` | `8000` | training steps |
 | `TS_LR` | `3e-4` | learning rate |
-| `TINYSTORIES_MAX_BYTES` | `200_000_000` | corpus size cap (bytes) |
+| `TS_MAX_BYTES` | `500000000` | corpus size cap (bytes) — 500MB |
 
 ## Rough budget
 
-On an A100 40GB (~$0.80/hr):
-- Parity sweep, defaults: ~20 min. **~$0.30.**
-- TinyStories bench, defaults: ~2–3 hours for 5000 steps × 2 conditions. **~$1.50–2.50.**
-- Total: under **$3** for a full run.
+On an A100 80GB SXM (~$1.79/hr community):
+- Parity sweep, defaults (6 sizes up to d=2048): ~45–60 min. **~$1.50.**
+- TinyStories bench at d=1024 / 12 layers / 8000 steps × 2 conditions: ~1–1.5 hours. **~$2–3.**
+- Buffer: ~30 min. **~$1.**
+- Total: **~$5–7** for a full run.
 
-An H100 cuts TinyStories to ~1 hour but at 2–3× the hourly. Roughly break-even
-in dollars; A100 is recommended for the cost profile.
+On an A100 40GB (~$0.80/hr):
+- Override `TS_D_MODEL=768 TS_BATCH_SIZE=48 TS_N_LAYERS=8 TS_N_HEADS=12`.
+- Parity sweep up to `D_MODEL_SWEEP="384,512,768,1024"` and `PARITY_BATCH_SIZE=24`.
+- Total: **~$3–4**.
+
+An H100 SXM cuts wall time ~2× but at ~2× the hourly. Dollar-even; A100
+80GB recommended.
 
 ## Smoke testing locally first
 

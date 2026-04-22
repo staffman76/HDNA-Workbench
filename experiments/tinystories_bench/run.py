@@ -12,8 +12,9 @@ The point is a fair head-to-head at a scale that's small enough for a
 single-GPU rental budget but big enough to be recognizable as a real LM
 training run (not a toy).
 
-Tuned for A100 40GB defaults; override via env:
-    D_MODEL=768 N_LAYERS=8 N_HEADS=12 BATCH_SIZE=64 SEQ_LEN=512 STEPS=5000
+Defaults are moderate (A100 40GB friendly). Override via env on bigger GPUs;
+`scripts/run_on_cloud.sh` bumps these to A100 80GB SXM targets automatically:
+    D_MODEL=1024 N_LAYERS=12 N_HEADS=16 BATCH_SIZE=96 SEQ_LEN=512 STEPS=8000
 
 Smoke-test on a 4060 Ti:
     D_MODEL=256 N_LAYERS=4 N_HEADS=4 BATCH_SIZE=32 SEQ_LEN=256 STEPS=500 \

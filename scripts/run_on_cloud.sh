@@ -52,10 +52,11 @@ mkdir -p "$ARTIFACT_DIR"
 
 # ---------------------------------------------------------------------------
 # Scaling sweep
+# Defaults sized for A100 80GB SXM. Extends to d=2048 for a full claim.
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_PARITY:-0}" != "1" ]]; then
     log "== parity_transformer sweep =="
-    D_MODEL_SWEEP="${D_MODEL_SWEEP:-384,512,768,1024}" \
+    D_MODEL_SWEEP="${D_MODEL_SWEEP:-384,512,768,1024,1536,2048}" \
     N_LAYERS="${PARITY_N_LAYERS:-6}" \
     N_HEADS="${PARITY_N_HEADS:-8}" \
     SEQ_LEN="${PARITY_SEQ_LEN:-256}" \
@@ -68,17 +69,21 @@ fi
 
 # ---------------------------------------------------------------------------
 # TinyStories matched-baseline
+# Defaults sized for A100 80GB SXM: d=1024, 12 layers, ~200M params — the
+# size class people actually train from scratch. VRAM-headroom permits
+# batch 96 / seq 512 without gradient checkpointing.
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_TINYSTORIES:-0}" != "1" ]]; then
     log "== tinystories_bench =="
-    D_MODEL="${TS_D_MODEL:-768}" \
-    N_LAYERS="${TS_N_LAYERS:-8}" \
-    N_HEADS="${TS_N_HEADS:-12}" \
+    D_MODEL="${TS_D_MODEL:-1024}" \
+    N_LAYERS="${TS_N_LAYERS:-12}" \
+    N_HEADS="${TS_N_HEADS:-16}" \
     N_EXPERTS="${TS_N_EXPERTS:-4}" \
-    BATCH_SIZE="${TS_BATCH_SIZE:-64}" \
+    BATCH_SIZE="${TS_BATCH_SIZE:-96}" \
     SEQ_LEN="${TS_SEQ_LEN:-512}" \
-    STEPS="${TS_STEPS:-5000}" \
+    STEPS="${TS_STEPS:-8000}" \
     LR="${TS_LR:-3e-4}" \
+    TINYSTORIES_MAX_BYTES="${TS_MAX_BYTES:-500000000}" \
     RESULTS_DIR="$ARTIFACT_DIR/tinystories_cloud" \
         python -m experiments.tinystories_bench.run 2>&1 \
         | tee "$ARTIFACT_DIR/tinystories.log"
