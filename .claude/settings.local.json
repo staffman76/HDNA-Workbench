@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(python *)",
+      "Bash(pip uninstall *)",
+      "Bash(pip install *)",
+      "Bash(git *)",
+      "Bash(grep -E \"accuracy|step 2[0-9]{3,4}\")",
+      "Bash(D_MODEL_SWEEP=\"64,128\" STEPS=100 python -m experiments.parity_transformer.run_sweep)"
+    ]
+  }
+}
