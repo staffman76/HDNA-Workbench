@@ -12,8 +12,9 @@ A sequence of empirical tests targeting specific load-bearing claims in `ARCHITE
 | 4 | [expert_routing/](expert_routing/) | `RoutedExpertMLP` produces interpretable per-token specialization | ✅ **Qualified pass** (no fix needed) | 0 lines |
 | 5 | [shadow_graduation/](shadow_graduation/) | Two-tier `FRESH → LEARNING → GRADUATED → MASTERED` progression with stress-gated demotion | ✅ **Pass** after 3 bug fixes | ~20 lines |
 | 6 | [daemon_phases/](daemon_phases/) | `Daemon.advance_phase` quality-gated `APPRENTICE → INDEPENDENT` progression | ✅ **Qualified pass** after abstention fix | ~10 lines |
+| 7 | [scaffold_decay/](scaffold_decay/) | `Coordinator.scaffold_strength` decays correctly; selection blends confidence × Q-values | ✅ **Clean pass** (no fix needed; calibration note on default floor) | 0 lines |
 
-**Cumulative diff**: six experiments, eleven files touched in `workbench/core/`, ~240 lines of fixes, ~47 plots, ~6800 lines of experiment code + results JSON.
+**Cumulative diff**: seven experiments, eleven files touched in `workbench/core/`, ~240 lines of fixes, ~49 plots, ~7100 lines of experiment code + results JSON.
 
 ## The pattern across all five
 
@@ -25,8 +26,9 @@ Every claim tested was **substantively correct** — the architecture's underlyi
 - **expert routing**: no fix needed; moderate-but-real specialization emerged organically. Magnitudes would likely sharpen with longer training.
 - **shadow graduation**: three separate bugs in `shadow.py` + `fast.py` — `fast_correct` never incremented, wrong denominator for `fast_accuracy`, plain ReLU in `fast_forward` vs leaky ReLU in the slow path. The last one caused fast-vs-shadow argmax disagreement on 42% of inputs; after the fix, they match to 1.3e-15.
 - **daemon phases**: `Coordinator.record_outcome` iterated over every registered daemon — so an abstaining daemon (`reason()` returned `None`) still accumulated `proposals_made` per round. Tracking the actual proposers in `collect_proposals` and using that set in `record_outcome` fixed it.
+- **scaffold decay**: no core fix needed. Decay math exact to floating-point precision; confidence-Q blend works as specified. Calibration note only: default `scaffold_floor=0.4` gives inconsistent mitigation of the confidence-only quirk (helps 2/3 seeds, slightly hurts 1/3); `floor=0` gives full reliable mitigation.
 
-None of the six tests found anything fundamentally broken in the architectural design. Every failure had a targeted fix of a few to a few dozen lines.
+None of the seven tests found anything fundamentally broken in the architectural design. Integration gaps, when present, had targeted fixes of a few to a few dozen lines.
 
 ## Headline numbers (after fixes)
 
@@ -99,7 +101,19 @@ Contextual bandit, 2500 rounds, seeds `{0, 1, 2}`. Probe coordinator (oracle in 
 | main  | noisy   | `JOURNEYMAN`, `JOURNEYMAN`, `COMPETENT` | +0.613 | 0.424 |
 | main  | random  | `APPRENTICE` × 3 | −0.508 | 0.029 |
 
-All 28 recorded transitions (across 6 coordinator-seeds) met their documented gates. Isolated progression hits each gate at the exact minimum proposal count. Under pure-confidence competition, absolute quality is strictly ordered every seed (`avg_reward` oracle > noisy > random 3/3), but phase ceiling inverts on 1/3 seeds when noisy and oracle confidence distributions overlap — a property of confidence-only selection, scheduled for mitigation by scaffold-decay validation (claim #4).
+All 28 recorded transitions (across 6 coordinator-seeds) met their documented gates. Isolated progression hits each gate at the exact minimum proposal count. Under pure-confidence competition, absolute quality is strictly ordered every seed (`avg_reward` oracle > noisy > random 3/3), but phase ceiling inverts on 1/3 seeds when noisy and oracle confidence distributions overlap — a property of confidence-only selection, mitigated in experiment 7.
+
+### 7. Scaffold decay
+Contextual bandit, 2500 rounds, seeds `{0, 1, 2}`, four scoring regimes. Oracle daemon's acceptance_rate and final phase:
+
+| condition | `scaffold` trajectory | oracle phase (per seed) | oracle acc_r (per seed) |
+|:--|:--|:--|:--|
+| `frozen_scaffold` (confidence only) | 1.0 → 1.0 | `COMPETENT`, `EXPERT`, `JOURNEYMAN` | 0.559, 0.588, 0.493 |
+| `frozen_brain` (Q only)             | 0.0 → 0.0 | `INDEPENDENT` × 3 | 1.000, 1.000, 1.000 |
+| `natural_decay` (defaults, floor=0.4) | 1.0 → 0.4 | `EXPERT`, `EXPERT`, `JOURNEYMAN` | 0.623, 0.650, 0.464 |
+| `full_decay` (floor=0)              | 1.0 → 0.0 | `INDEPENDENT` × 3 | 0.767, 0.794, 0.814 |
+
+Decay math matches `max(floor, start − i·rate)` to `8.9e-16` max error. Full decay (floor=0) fully mitigates the exp-6 confidence-only quirk: oracle reaches `INDEPENDENT` every seed and late-stage rolling win share = 1.000. Natural decay (default floor=0.4) provides partial-but-inconsistent mitigation — acceptance improves 2/3 seeds, regresses 1/3. Calibration note in the experiment README suggests lowering the default floor or using a floor-schedule.
 
 ## Known gaps not yet closed
 
@@ -116,7 +130,6 @@ The validation campaign hit the top-priority load-bearing claims. Still outstand
 
 - **Curriculum mastery and catastrophic-forgetting detection.** `Curriculum.progress` transitions and the forgetting flag.
 - **Stress monitor → homeostasis daemon loop.** Does the system prune dead neurons / spawn replacements as intended?
-- **Scaffold decay in the coordinator.** The transition from "favor high-confidence proposals" to "trust brain Q-values" over time. Directly relevant to the phase-ceiling non-determinism surfaced in experiment 6 — the decay mechanism is what's supposed to mitigate it.
 
 Given the pattern so far, it's worth expecting each to reveal a fixable integration gap or two, rather than a fundamental failure.
 
@@ -145,6 +158,10 @@ python -m experiments.shadow_graduation.run
 # Daemon phase progression (~5 s per seed on CPU)
 python -m experiments.daemon_phases.run
 python -m experiments.daemon_phases.multi_seed
+
+# Scaffold decay (~20 s per seed on CPU, 4 conditions each)
+python -m experiments.scaffold_decay.run
+python -m experiments.scaffold_decay.multi_seed
 ```
 
 Each experiment's results land under its own `results/` directory; plots in `plots/`. Every run also writes a `report.json` with full config, training curves, and aggregate metrics so downstream tooling can pick up the numbers without re-running.
