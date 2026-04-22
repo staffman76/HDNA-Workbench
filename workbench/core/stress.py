@@ -221,12 +221,19 @@ class HomeostasisDaemon(Daemon):
         interventions = []
 
         if "dead_neurons_critical" in report.warnings or "dead_neurons_warning" in report.warnings:
-            dead_ids = [nid for nid, n in net.neurons.items() if n.is_dead]
+            # Never prune output-layer neurons — they define the network's
+            # output_dim contract and pruning shrinks the output vector
+            # permanently (spawn targets only hidden layers). Dead output
+            # neurons need a different remediation (retraining / reroute)
+            # that is out of scope for the dead-neuron loop here.
+            output_layer = net.num_layers - 1
+            dead_ids = [nid for nid, n in net.neurons.items()
+                        if n.is_dead and n.layer != output_layer]
             if dead_ids:
                 interventions.append(Intervention(
                     kind="prune",
                     target_ids=dead_ids[:20],  # batch limit
-                    reasoning=f"{len(dead_ids)} dead neurons detected ({report.dead_pct:.1f}%)",
+                    reasoning=f"{len(dead_ids)} dead hidden neurons detected ({report.dead_pct:.1f}%)",
                     # Prune must fire before spawn so "most depleted layer"
                     # in apply_interventions reflects the post-prune state.
                     priority=0.9 if "critical" in str(report.warnings) else 0.7,

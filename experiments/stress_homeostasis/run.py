@@ -55,6 +55,7 @@ OUTPUT_DIM = 3
 WARMUP_STEPS = 25
 HEALTHY_STEPS = 40
 KILL_COUNT = 6         # number of layer-1 neurons to zero-weight
+KILL_OUTPUT = 1        # number of output-layer neurons to zero-weight
 FORCE_DEATH_FORWARDS = 40   # passes to let memory fill after kill
 RECOVER_STEPS = 40         # passes after intervention
 
@@ -122,19 +123,31 @@ def phase2_healthy(net, monitor, daemon, rng, start_ep: int):
 
 
 def phase3_induce_damage(net, monitor, daemon, rng, start_ep: int):
-    """Zero the weights of KILL_COUNT layer-1 neurons. Fire enough times to
-    mark them is_dead. Then snapshot + propose."""
+    """Zero the weights of KILL_COUNT layer-1 neurons AND KILL_OUTPUT output
+    neurons. Fire enough times to mark them is_dead. The output kill is
+    deliberate: it lets us verify that the daemon's prune intervention
+    excludes output-layer neurons (see stress.py:dead_ids filter)."""
     layer1_ids = [nid for nid, n in net.neurons.items() if n.layer == 1]
-    to_kill = layer1_ids[:KILL_COUNT]
+    output_layer_idx = net.num_layers - 1
+    output_ids = [nid for nid, n in net.neurons.items()
+                  if n.layer == output_layer_idx]
+    to_kill_hidden = layer1_ids[:KILL_COUNT]
+    to_kill_output = output_ids[:KILL_OUTPUT]
+    to_kill = to_kill_hidden + to_kill_output
     for nid in to_kill:
         net.neurons[nid].weights[:] = 0.0
         net.neurons[nid].bias = 0.0
-        # Clear memory so it has to refill with post-kill activations
         net.neurons[nid].memory = []
-        # Also kill incoming route strengths into layer 2 via these neurons?
-        # No — their output weights (routing out) still pass whatever they
-        # produce. But since their output will be ~0, downstream neurons
-        # receive 0. Fine.
+    # For output-layer kills we also need to zero incoming route strengths
+    # so the output neuron actually produces zeros (its "weights" are not
+    # used in forward — routing strengths from layer (n-1) are). Without
+    # this, the output neuron still receives non-zero inputs and only the
+    # neuron's own weights being zeroed has no effect on its activation.
+    for nid in to_kill_output:
+        for src_neuron in net.neurons.values():
+            src_neuron.routing = [(tid, 0.0 if tid == nid else s)
+                                  for tid, s in src_neuron.routing]
+    net._index_dirty = True
 
     per_step = []
     for i in range(FORCE_DEATH_FORWARDS):
@@ -153,12 +166,24 @@ def phase3_induce_damage(net, monitor, daemon, rng, start_ep: int):
     intervention_kinds = ([i.kind for i in proposal.action.interventions]
                           if proposal is not None else [])
 
+    # Record prune target list so we can verify it excludes output neurons.
+    prune_targets = []
+    if proposal is not None:
+        for itv in proposal.action.interventions:
+            if itv.kind == "prune":
+                prune_targets = list(itv.target_ids)
+                break
+
     return {
         "killed_ids": to_kill,
+        "killed_hidden_ids": to_kill_hidden,
+        "killed_output_ids": to_kill_output,
+        "output_layer_idx": output_layer_idx,
         "per_step": per_step,
         "damage_snapshot": damage_summary,
         "daemon_proposed": proposal is not None,
         "intervention_kinds": intervention_kinds,
+        "prune_targets": prune_targets,
         "proposal": proposal,
         "confidence": (proposal.confidence if proposal is not None else None),
     }
@@ -233,6 +258,18 @@ def evaluate(phase1, phase2, phase3, phase4):
     # P6 — post-recovery dead_pct strictly lower than damage dead_pct
     p6 = phase4["final_dead_pct"] < dmg["dead_pct"]
 
+    # P7 — output-layer size preserved across the intervention.
+    # Prune must not target output-layer neurons (shrinks output_dim
+    # permanently since spawn only targets hidden layers).
+    output_idx = phase3["output_layer_idx"]
+    pre = phase4["pre_layer_sizes"]
+    post_apply = phase4["post_apply_layer_sizes"]
+    p7a = pre.get(output_idx, 0) == post_apply.get(output_idx, 0)
+    # And: the prune target list must not contain any output neuron id.
+    prune_targets = set(phase3["prune_targets"])
+    output_kill_set = set(phase3["killed_output_ids"])
+    p7b = not (prune_targets & output_kill_set)
+
     return {
         "P1_warmup_suppresses_warnings": p1,
         "P2a_healthy_dead_pct_below_warn": p2a,
@@ -251,6 +288,10 @@ def evaluate(phase1, phase2, phase3, phase4):
         "P6_recovery_dead_pct_lower": p6,
         "P6_damage_dead_pct": dmg["dead_pct"],
         "P6_recovery_dead_pct": phase4["final_dead_pct"],
+        "P7a_output_layer_size_preserved": p7a,
+        "P7a_pre_output_count": pre.get(output_idx, 0),
+        "P7a_post_output_count": post_apply.get(output_idx, 0),
+        "P7b_output_neurons_not_in_prune_targets": p7b,
     }
 
 
