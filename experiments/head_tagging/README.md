@@ -64,6 +64,29 @@ All eight heads sit at gate values between 0.888 and 0.911 — barely moved from
 
 The raw `avg_sharpness` column is monotone with ablation impact. If you sort by sharpness, you get almost the same ranking as sorting by importance. The information needed to identify the important head is being collected — it's the downstream label that's wrong.
 
+### Direct attention evidence (visualize.py)
+
+A second script (`python -m experiments.head_tagging.visualize`) re-trains the model, dumps per-head attention matrices on a held-out batch, and plots them against the expected induction pattern (for query `i` in the second half, the correct key is `i - prefix_len`). Per-head "peak-key matches induction target" across the 24 second-half queries × 4 batch items:
+
+| head | exact match | within ±1 | mean off-by |
+|:---|---:|---:|---:|
+| **L0H0** | **89.6%** | 90.6% | 1.23 |
+| L0H1 | 83.3% | 84.4% | 1.52 |
+| L0H2 | 76.0% | 79.2% | 1.90 |
+| L0H3 | 64.6% | 67.7% | 2.64 |
+| L1H0 | 4.2% | 7.3% | 11.49 |
+| L1H1 | 6.2% | 10.4% | 11.56 |
+| L1H2 | 7.3% | 11.5% | 10.30 |
+| L1H3 | 8.3% | 13.5% | 10.85 |
+
+**L0H0's attention lines up with the induction target 90% of the time — literally doing induction.** All four layer-0 heads participate in the circuit to varying degrees; all four layer-1 heads ignore the induction target and instead park attention at a fixed landmark position (key=23, the last prefix token before the delimiter). See `plots/attention_heatmaps.png` for the bright diagonal along `y = x − 24` in the second-half quadrant of every layer-0 head.
+
+This confirms the ablation interpretation: **the ablation signal on L0H0 really is from induction behavior**, not an incidental artifact. We now have two independent lines of ground-truth evidence for L0H0 being *the* induction head — and the tagging system called it `global_mixer`.
+
+### The model found a positional shortcut, not a classical 2-layer induction circuit
+
+Canonical induction (Olsson et al. 2022) uses a 2-layer circuit: layer 0 "previous-token" + layer 1 "match-and-copy." Our L1 heads do near nothing useful, so the model instead learned a 1-layer **positional shortcut** — "at query `i` in the second half, attend to `i − 24`" — which works here because the task has a fixed repeat period. That's still functionally induction for this task, just not the textbook mechanism.
+
 ## Verdict
 
 The head-tagging claim, as implemented, does not survive a ground-truth-known test. The infrastructure is real (stats are recorded, gates are trainable, snapshots are inspectable), but:
