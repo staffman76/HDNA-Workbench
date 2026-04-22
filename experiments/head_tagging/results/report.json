@@ -1,0 +1,299 @@
+{
+  "config": {
+    "vocab_size": 32,
+    "prefix_len": 24,
+    "seq_len": 49,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_layers": 2,
+    "n_experts": 4,
+    "d_ff": 128,
+    "steps": 3000,
+    "seed": 0
+  },
+  "baseline_second_half_acc": 0.9919514973958333,
+  "baseline_overall_acc": 0.5324300130208334,
+  "training_curve": [
+    [
+      250,
+      3.3698670864105225,
+      0.034765625
+    ],
+    [
+      500,
+      3.3648014068603516,
+      0.05279947916666667
+    ],
+    [
+      750,
+      2.13122296333313,
+      0.9936848958333333
+    ]
+  ],
+  "heads": [
+    {
+      "layer": 0,
+      "head": 0,
+      "tag": "global_mixer",
+      "avg_entropy": 1.2837,
+      "avg_sharpness": 0.6114,
+      "gate_value": 0.9113,
+      "top_positions": [
+        [
+          0,
+          731
+        ],
+        [
+          1,
+          689
+        ],
+        [
+          2,
+          415
+        ],
+        [
+          3,
+          132
+        ],
+        [
+          5,
+          76
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.1242,
+      "delta_acc_overall": -0.0622
+    },
+    {
+      "layer": 0,
+      "head": 1,
+      "tag": "global_mixer",
+      "avg_entropy": 1.5388,
+      "avg_sharpness": 0.5398,
+      "gate_value": 0.9067,
+      "top_positions": [
+        [
+          0,
+          669
+        ],
+        [
+          4,
+          576
+        ],
+        [
+          2,
+          473
+        ],
+        [
+          1,
+          256
+        ],
+        [
+          3,
+          153
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0241,
+      "delta_acc_overall": -0.0123
+    },
+    {
+      "layer": 0,
+      "head": 2,
+      "tag": "global_mixer",
+      "avg_entropy": 1.6246,
+      "avg_sharpness": 0.5141,
+      "gate_value": 0.9054,
+      "top_positions": [
+        [
+          1,
+          669
+        ],
+        [
+          0,
+          664
+        ],
+        [
+          2,
+          543
+        ],
+        [
+          3,
+          90
+        ],
+        [
+          4,
+          83
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.023,
+      "delta_acc_overall": -0.0116
+    },
+    {
+      "layer": 0,
+      "head": 3,
+      "tag": "global_mixer",
+      "avg_entropy": 1.6955,
+      "avg_sharpness": 0.4934,
+      "gate_value": 0.9042,
+      "top_positions": [
+        [
+          0,
+          738
+        ],
+        [
+          1,
+          626
+        ],
+        [
+          2,
+          586
+        ],
+        [
+          6,
+          89
+        ],
+        [
+          3,
+          84
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0139,
+      "delta_acc_overall": -0.0075
+    },
+    {
+      "layer": 1,
+      "head": 0,
+      "tag": "global_mixer",
+      "avg_entropy": 1.389,
+      "avg_sharpness": 0.5914,
+      "gate_value": 0.8911,
+      "top_positions": [
+        [
+          0,
+          677
+        ],
+        [
+          1,
+          361
+        ],
+        [
+          2,
+          313
+        ],
+        [
+          4,
+          217
+        ],
+        [
+          23,
+          129
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0001,
+      "delta_acc_overall": 0.0001
+    },
+    {
+      "layer": 1,
+      "head": 1,
+      "tag": "balanced",
+      "avg_entropy": 1.5798,
+      "avg_sharpness": 0.5403,
+      "gate_value": 0.8922,
+      "top_positions": [
+        [
+          0,
+          588
+        ],
+        [
+          1,
+          509
+        ],
+        [
+          2,
+          311
+        ],
+        [
+          23,
+          127
+        ],
+        [
+          4,
+          99
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0009,
+      "delta_acc_overall": -0.0009
+    },
+    {
+      "layer": 1,
+      "head": 2,
+      "tag": "balanced",
+      "avg_entropy": 1.787,
+      "avg_sharpness": 0.4697,
+      "gate_value": 0.8925,
+      "top_positions": [
+        [
+          0,
+          695
+        ],
+        [
+          2,
+          363
+        ],
+        [
+          1,
+          263
+        ],
+        [
+          21,
+          134
+        ],
+        [
+          10,
+          112
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0006,
+      "delta_acc_overall": -0.0004
+    },
+    {
+      "layer": 1,
+      "head": 3,
+      "tag": "balanced",
+      "avg_entropy": 2.4035,
+      "avg_sharpness": 0.2942,
+      "gate_value": 0.888,
+      "top_positions": [
+        [
+          0,
+          617
+        ],
+        [
+          2,
+          394
+        ],
+        [
+          7,
+          199
+        ],
+        [
+          4,
+          194
+        ],
+        [
+          1,
+          164
+        ]
+      ],
+      "is_dead": false,
+      "delta_acc_second_half": -0.0027,
+      "delta_acc_overall": -0.0017
+    }
+  ]
+}
