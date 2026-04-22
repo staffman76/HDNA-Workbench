@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# End-to-end cloud runner. Assumes a fresh Ubuntu + CUDA box
+# (RunPod / vast.ai / Lambda) with Python 3.10+, pip, and git.
+#
+# Usage:
+#   REPO_URL=https://github.com/staffman76/HDNA-Workbench.git \
+#       bash run_on_cloud.sh
+#
+# Optional env overrides:
+#   REPO_BRANCH=main
+#   ARTIFACT_DIR=/workspace/artifacts
+#   SKIP_PARITY=1          # skip the scaling sweep
+#   SKIP_TINYSTORIES=1     # skip the head-to-head bench
+#   D_MODEL_SWEEP=384,512,768,1024
+#   TS_D_MODEL=768 TS_N_LAYERS=8 TS_BATCH_SIZE=64 TS_STEPS=5000
+
+set -euo pipefail
+
+REPO_URL="${REPO_URL:?REPO_URL is required}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
+ARTIFACT_DIR="${ARTIFACT_DIR:-/workspace/artifacts}"
+WORKDIR="${WORKDIR:-/workspace/hdna}"
+
+log() { printf '\033[1;36m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
+
+log "GPU info"
+nvidia-smi | head -20 || log "nvidia-smi not available (CPU-only?)"
+
+log "cloning repo"
+if [[ ! -d "$WORKDIR" ]]; then
+    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$WORKDIR"
+fi
+cd "$WORKDIR"
+
+log "installing package + torch"
+pip install --upgrade pip
+pip install -e ".[pytorch]"
+pip install matplotlib
+
+log "smoke test: cuda available?"
+python - <<'PY'
+import torch
+print(f"torch: {torch.__version__}")
+print(f"cuda: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"device: {torch.cuda.get_device_name(0)}")
+    p = torch.cuda.get_device_properties(0)
+    print(f"VRAM: {p.total_memory / 1024**3:.1f} GB")
+PY
+
+mkdir -p "$ARTIFACT_DIR"
+
+# ---------------------------------------------------------------------------
+# Scaling sweep
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_PARITY:-0}" != "1" ]]; then
+    log "== parity_transformer sweep =="
+    D_MODEL_SWEEP="${D_MODEL_SWEEP:-384,512,768,1024}" \
+    N_LAYERS="${PARITY_N_LAYERS:-6}" \
+    N_HEADS="${PARITY_N_HEADS:-8}" \
+    SEQ_LEN="${PARITY_SEQ_LEN:-256}" \
+    BATCH_SIZE="${PARITY_BATCH_SIZE:-32}" \
+    STEPS="${PARITY_STEPS:-1500}" \
+    RESULTS_DIR="$ARTIFACT_DIR/parity_cloud" \
+        python -m experiments.parity_transformer.run_sweep 2>&1 \
+        | tee "$ARTIFACT_DIR/parity_sweep.log"
+fi
+
+# ---------------------------------------------------------------------------
+# TinyStories matched-baseline
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_TINYSTORIES:-0}" != "1" ]]; then
+    log "== tinystories_bench =="
+    D_MODEL="${TS_D_MODEL:-768}" \
+    N_LAYERS="${TS_N_LAYERS:-8}" \
+    N_HEADS="${TS_N_HEADS:-12}" \
+    N_EXPERTS="${TS_N_EXPERTS:-4}" \
+    BATCH_SIZE="${TS_BATCH_SIZE:-64}" \
+    SEQ_LEN="${TS_SEQ_LEN:-512}" \
+    STEPS="${TS_STEPS:-5000}" \
+    LR="${TS_LR:-3e-4}" \
+    RESULTS_DIR="$ARTIFACT_DIR/tinystories_cloud" \
+        python -m experiments.tinystories_bench.run 2>&1 \
+        | tee "$ARTIFACT_DIR/tinystories.log"
+fi
+
+log "archiving artifacts"
+cd "$ARTIFACT_DIR"
+tar czf "$ARTIFACT_DIR/run_$(date +%Y%m%d_%H%M%S).tar.gz" \
+    parity_cloud/ tinystories_cloud/ *.log 2>/dev/null || true
+
+log "done. artifacts in $ARTIFACT_DIR"
+ls -la "$ARTIFACT_DIR"

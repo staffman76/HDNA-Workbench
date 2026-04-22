@@ -22,20 +22,35 @@ from .data import load_char_dataset
 from .train import TrainConfig, train_one
 
 
-D_MODEL_SWEEP = [64, 96, 128, 192, 256, 384]
+def _env_int_list(key: str, default: list[int]) -> list[int]:
+    raw = os.environ.get(key)
+    if not raw:
+        return default
+    return [int(x) for x in raw.split(",") if x.strip()]
+
+
+def _env_int(key: str, default: int) -> int:
+    return int(os.environ.get(key, default))
+
+
+# Defaults tuned for 4060 Ti (8GB); override via env vars on bigger GPUs:
+#   D_MODEL_SWEEP="384,512,768,1024"
+#   BATCH_SIZE=64 SEQ_LEN=256 STEPS=2000 N_LAYERS=8
+D_MODEL_SWEEP = _env_int_list("D_MODEL_SWEEP", [64, 96, 128, 192, 256, 384])
 CONDITIONS = ["vanilla", "inspectable_trace_off", "inspectable_trace_on"]
 
-# Fixed across the sweep. Shape chosen to match what people actually train:
-# enough layers and context to look like a real small LM, small enough that a
-# 4060 Ti (8GB) handles the largest d_model comfortably.
-N_LAYERS = 4
-N_HEADS = 4
-SEQ_LEN = 128
-BATCH_SIZE = 32
-STEPS = 1000
-SEED = 0
+N_LAYERS = _env_int("N_LAYERS", 4)
+N_HEADS = _env_int("N_HEADS", 4)
+SEQ_LEN = _env_int("SEQ_LEN", 128)
+BATCH_SIZE = _env_int("BATCH_SIZE", 32)
+STEPS = _env_int("STEPS", 1000)
+SEED = _env_int("SEED", 0)
 
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+# Results directory override lets cloud runs drop artifacts anywhere.
+RESULTS_DIR = os.environ.get(
+    "RESULTS_DIR",
+    os.path.join(os.path.dirname(__file__), "results"),
+)
 
 
 def _free_gpu():
