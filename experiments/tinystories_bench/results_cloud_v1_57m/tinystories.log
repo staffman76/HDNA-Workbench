@@ -1,0 +1,49 @@
+downloading TinyStories-train.txt (may take a minute)...
+writing byte memmap (200,000,000 bytes) -> /workspace/hdna/experiments/tinystories_bench/_data/tinystories.u8.bin
+==============================================================================
+tinystories_bench  device=cuda
+  d_model: 768
+  n_layers: 8
+  n_heads: 12
+  n_experts: 4
+  d_ff_mult: 4
+  batch_size: 64
+  seq_len: 512
+  steps: 5000
+  lr: 0.0003
+  seed: 0
+  eval_every: 250
+  eval_batches: 20
+  vocab_size: 256
+  train_tokens: 199000000
+  val_tokens: 1000000
+  device: cuda
+==============================================================================
+
+--- vanilla ---
+  params (total):          57,491,200
+  params (active / token): 57,491,200
+  final val loss / PPL:    0.6203 / 1.86
+  fwd ms / fwd+bwd ms:     244.94 / 758.00
+  peak mem (MB):           15124
+  tokens/sec:              41,942
+  wall time:               3921.6s
+
+--- inspectable_trace_off ---
+  params (total):          57,534,336
+  params (active / token): 38,635,392
+  final val loss / PPL:    0.6214 / 1.86
+  fwd ms / fwd+bwd ms:     240.07 / 767.66
+  peak mem (MB):           18716
+  tokens/sec:              41,432
+  wall time:               3968.8s
+
+==============================================================================
+HEAD-TO-HEAD
+==============================================================================
+  final val PPL         vanilla=1.859  inspectable=1.862  ratio=1.001x
+  tokens/sec            vanilla=41,942  inspectable=41,432  ratio=0.988x
+  peak mem (MB)         vanilla=15124  inspectable=18716
+  params                vanilla=57,491,200  inspectable=57,534,336
+
+wrote summary -> /workspace/artifacts/tinystories_cloud/_summary.json

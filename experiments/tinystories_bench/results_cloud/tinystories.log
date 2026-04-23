@@ -1,49 +1,195 @@
-downloading TinyStories-train.txt (may take a minute)...
-writing byte memmap (200,000,000 bytes) -> /workspace/hdna/experiments/tinystories_bench/_data/tinystories.u8.bin
 ==============================================================================
 tinystories_bench  device=cuda
-  d_model: 768
-  n_layers: 8
-  n_heads: 12
+  d_model: 1024
+  n_layers: 12
+  n_heads: 16
   n_experts: 4
   d_ff_mult: 4
-  batch_size: 64
+  batch_size: 96
   seq_len: 512
-  steps: 5000
+  steps: 8000
   lr: 0.0003
   seed: 0
   eval_every: 250
   eval_batches: 20
   vocab_size: 256
-  train_tokens: 199000000
-  val_tokens: 1000000
+  train_tokens: 497500000
+  val_tokens: 2500000
   device: cuda
+  bf16: True
+  compile: True
+  save_checkpoint_dir: /workspace/artifacts/checkpoints
+  conditions: ['inspectable_trace_off']
 ==============================================================================
-
---- vanilla ---
-  params (total):          57,491,200
-  params (active / token): 57,491,200
-  final val loss / PPL:    0.6203 / 1.86
-  fwd ms / fwd+bwd ms:     244.94 / 758.00
-  peak mem (MB):           15124
-  tokens/sec:              41,942
-  wall time:               3921.6s
 
 --- inspectable_trace_off ---
-  params (total):          57,534,336
-  params (active / token): 38,635,392
-  final val loss / PPL:    0.6214 / 1.86
-  fwd ms / fwd+bwd ms:     240.07 / 767.66
-  peak mem (MB):           18716
-  tokens/sec:              41,432
-  wall time:               3968.8s
-
-==============================================================================
-HEAD-TO-HEAD
-==============================================================================
-  final val PPL         vanilla=1.859  inspectable=1.862  ratio=1.001x
-  tokens/sec            vanilla=41,942  inspectable=41,432  ratio=0.988x
-  peak mem (MB)         vanilla=15124  inspectable=18716
-  params                vanilla=57,491,200  inspectable=57,534,336
+  step 1/8000  loss=5.6842  tok/s=1,597
+  step 50/8000  loss=2.3240  tok/s=52,917
+  step 100/8000  loss=2.3014  tok/s=78,653
+  step 150/8000  loss=2.2731  tok/s=93,838
+  step 200/8000  loss=2.2208  tok/s=103,831
+  step 250/8000  loss=2.0546  tok/s=110,895
+  step 300/8000  loss=1.7441  tok/s=102,955
+  step 350/8000  loss=1.4747  tok/s=107,993
+  step 400/8000  loss=1.3451  tok/s=112,079
+  step 450/8000  loss=1.1799  tok/s=115,486
+  step 500/8000  loss=1.0898  tok/s=118,358
+  step 550/8000  loss=1.0600  tok/s=119,758
+  step 600/8000  loss=1.0127  tok/s=121,942
+  step 650/8000  loss=0.9523  tok/s=123,839
+  step 700/8000  loss=0.9188  tok/s=125,521
+  step 750/8000  loss=0.8995  tok/s=127,017
+  step 800/8000  loss=0.8486  tok/s=127,521
+  step 850/8000  loss=0.8510  tok/s=128,756
+  step 900/8000  loss=0.8195  tok/s=129,869
+  step 950/8000  loss=0.8001  tok/s=130,878
+  step 1000/8000  loss=0.8112  tok/s=131,804
+  step 1050/8000  loss=0.7755  tok/s=131,981
+  step 1100/8000  loss=0.7666  tok/s=132,786
+  step 1150/8000  loss=0.7577  tok/s=133,526
+  step 1200/8000  loss=0.7495  tok/s=134,217
+  step 1250/8000  loss=0.7593  tok/s=134,855
+  step 1300/8000  loss=0.7242  tok/s=134,876
+  step 1350/8000  loss=0.7280  tok/s=135,450
+  step 1400/8000  loss=0.7051  tok/s=135,987
+  step 1450/8000  loss=0.7296  tok/s=136,492
+  step 1500/8000  loss=0.7187  tok/s=136,965
+  step 1550/8000  loss=0.6926  tok/s=136,921
+  step 1600/8000  loss=0.7022  tok/s=137,350
+  step 1650/8000  loss=0.6614  tok/s=137,756
+  step 1700/8000  loss=0.7073  tok/s=138,144
+  step 1750/8000  loss=0.6853  tok/s=138,507
+  step 1800/8000  loss=0.6751  tok/s=138,420
+  step 1850/8000  loss=0.6621  tok/s=138,761
+  step 1900/8000  loss=0.6875  tok/s=139,084
+  step 1950/8000  loss=0.6578  tok/s=139,390
+  step 2000/8000  loss=0.6780  tok/s=139,685
+  step 2050/8000  loss=0.6620  tok/s=139,583
+  step 2100/8000  loss=0.6522  tok/s=139,859
+  step 2150/8000  loss=0.6467  tok/s=140,124
+  step 2200/8000  loss=0.6587  tok/s=140,380
+  step 2250/8000  loss=0.6335  tok/s=140,624
+  step 2300/8000  loss=0.6569  tok/s=140,509
+  step 2350/8000  loss=0.6570  tok/s=140,740
+  step 2400/8000  loss=0.6427  tok/s=140,965
+  step 2450/8000  loss=0.6123  tok/s=141,180
+  step 2500/8000  loss=0.6418  tok/s=141,387
+  step 2550/8000  loss=0.6394  tok/s=141,266
+  step 2600/8000  loss=0.6218  tok/s=141,460
+  step 2650/8000  loss=0.6488  tok/s=141,649
+  step 2700/8000  loss=0.6403  tok/s=141,832
+  step 2750/8000  loss=0.6312  tok/s=142,010
+  step 2800/8000  loss=0.6354  tok/s=141,892
+  step 2850/8000  loss=0.6222  tok/s=142,065
+  step 2900/8000  loss=0.6315  tok/s=142,233
+  step 2950/8000  loss=0.6158  tok/s=142,396
+  step 3000/8000  loss=0.6151  tok/s=142,551
+  step 3050/8000  loss=0.5944  tok/s=142,436
+  step 3100/8000  loss=0.6002  tok/s=142,587
+  step 3150/8000  loss=0.6042  tok/s=142,735
+  step 3200/8000  loss=0.6165  tok/s=142,877
+  step 3250/8000  loss=0.6110  tok/s=143,015
+  step 3300/8000  loss=0.5943  tok/s=142,897
+  step 3350/8000  loss=0.6148  tok/s=143,029
+  step 3400/8000  loss=0.5873  tok/s=143,155
+  step 3450/8000  loss=0.5965  tok/s=143,277
+  step 3500/8000  loss=0.6063  tok/s=143,398
+  step 3550/8000  loss=0.6101  tok/s=143,281
+  step 3600/8000  loss=0.5998  tok/s=143,399
+  step 3650/8000  loss=0.5956  tok/s=143,511
+  step 3700/8000  loss=0.6046  tok/s=143,622
+  step 3750/8000  loss=0.5932  tok/s=143,730
+  step 3800/8000  loss=0.5842  tok/s=143,615
+  step 3850/8000  loss=0.5888  tok/s=143,721
+  step 3900/8000  loss=0.5767  tok/s=143,824
+  step 3950/8000  loss=0.5887  tok/s=143,924
+  step 4000/8000  loss=0.5811  tok/s=144,022
+  step 4050/8000  loss=0.5923  tok/s=143,912
+  step 4100/8000  loss=0.5761  tok/s=144,009
+  step 4150/8000  loss=0.5929  tok/s=144,104
+  step 4200/8000  loss=0.5894  tok/s=144,196
+  step 4250/8000  loss=0.6026  tok/s=144,286
+  step 4300/8000  loss=0.5769  tok/s=144,178
+  step 4350/8000  loss=0.5833  tok/s=144,266
+  step 4400/8000  loss=0.5880  tok/s=144,353
+  step 4450/8000  loss=0.5879  tok/s=144,438
+  step 4500/8000  loss=0.5575  tok/s=144,521
+  step 4550/8000  loss=0.5685  tok/s=144,416
+  step 4600/8000  loss=0.5695  tok/s=144,497
+  step 4650/8000  loss=0.5799  tok/s=144,576
+  step 4700/8000  loss=0.5688  tok/s=144,654
+  step 4750/8000  loss=0.5729  tok/s=144,731
+  step 4800/8000  loss=0.5529  tok/s=144,630
+  step 4850/8000  loss=0.5660  tok/s=144,705
+  step 4900/8000  loss=0.5643  tok/s=144,779
+  step 4950/8000  loss=0.5555  tok/s=144,851
+  step 5000/8000  loss=0.5530  tok/s=144,923
+  step 5050/8000  loss=0.5535  tok/s=144,823
+  step 5100/8000  loss=0.5595  tok/s=144,893
+  step 5150/8000  loss=0.5490  tok/s=144,962
+  step 5200/8000  loss=0.5438  tok/s=145,029
+  step 5250/8000  loss=0.5490  tok/s=145,093
+  step 5300/8000  loss=0.5497  tok/s=144,996
+  step 5350/8000  loss=0.5542  tok/s=145,061
+  step 5400/8000  loss=0.5570  tok/s=145,124
+  step 5450/8000  loss=0.5548  tok/s=145,187
+  step 5500/8000  loss=0.5493  tok/s=145,249
+  step 5550/8000  loss=0.5473  tok/s=145,156
+  step 5600/8000  loss=0.5394  tok/s=145,216
+  step 5650/8000  loss=0.5474  tok/s=145,274
+  step 5700/8000  loss=0.5533  tok/s=145,332
+  step 5750/8000  loss=0.5582  tok/s=145,389
+  step 5800/8000  loss=0.5444  tok/s=145,297
+  step 5850/8000  loss=0.5374  tok/s=145,353
+  step 5900/8000  loss=0.5535  tok/s=145,409
+  step 5950/8000  loss=0.5388  tok/s=145,463
+  step 6000/8000  loss=0.5445  tok/s=145,518
+  step 6050/8000  loss=0.5248  tok/s=145,428
+  step 6100/8000  loss=0.5371  tok/s=145,480
+  step 6150/8000  loss=0.5578  tok/s=145,533
+  step 6200/8000  loss=0.5540  tok/s=145,585
+  step 6250/8000  loss=0.5412  tok/s=145,635
+  step 6300/8000  loss=0.5380  tok/s=145,547
+  step 6350/8000  loss=0.5338  tok/s=145,597
+  step 6400/8000  loss=0.5410  tok/s=145,645
+  step 6450/8000  loss=0.5327  tok/s=145,692
+  step 6500/8000  loss=0.5482  tok/s=145,739
+  step 6550/8000  loss=0.5396  tok/s=145,653
+  step 6600/8000  loss=0.5425  tok/s=145,700
+  step 6650/8000  loss=0.5396  tok/s=145,746
+  step 6700/8000  loss=0.5368  tok/s=145,792
+  step 6750/8000  loss=0.5386  tok/s=145,836
+  step 6800/8000  loss=0.5370  tok/s=145,753
+  step 6850/8000  loss=0.5362  tok/s=145,797
+  step 6900/8000  loss=0.5416  tok/s=145,840
+  step 6950/8000  loss=0.5340  tok/s=145,882
+  step 7000/8000  loss=0.5308  tok/s=145,925
+  step 7050/8000  loss=0.5466  tok/s=145,843
+  step 7100/8000  loss=0.5366  tok/s=145,884
+  step 7150/8000  loss=0.5282  tok/s=145,925
+  step 7200/8000  loss=0.5194  tok/s=145,966
+  step 7250/8000  loss=0.5270  tok/s=146,006
+  step 7300/8000  loss=0.5336  tok/s=145,927
+  step 7350/8000  loss=0.5392  tok/s=145,967
+  step 7400/8000  loss=0.5314  tok/s=146,006
+  step 7450/8000  loss=0.5392  tok/s=146,045
+  step 7500/8000  loss=0.5162  tok/s=146,082
+  step 7550/8000  loss=0.5243  tok/s=146,005
+  step 7600/8000  loss=0.5317  tok/s=146,043
+  step 7650/8000  loss=0.5144  tok/s=146,081
+  step 7700/8000  loss=0.5176  tok/s=146,059
+  step 7750/8000  loss=0.5050  tok/s=146,097
+  step 7800/8000  loss=0.4986  tok/s=146,022
+  step 7850/8000  loss=0.4945  tok/s=146,059
+  step 7900/8000  loss=0.5205  tok/s=146,095
+  step 7950/8000  loss=0.5153  tok/s=146,130
+  step 8000/8000  loss=0.5378  tok/s=146,166
+  params (total):          152,291,824
+  params (active / token): 101,911,024
+  final val loss / PPL:    0.5294 / 1.70
+  fwd ms / fwd+bwd ms:     207.58 / 667.34
+  peak mem (MB):           54270
+  tokens/sec:              146,057
+  wall time:               2792.1s
 
 wrote summary -> /workspace/artifacts/tinystories_cloud/_summary.json

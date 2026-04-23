@@ -1,0 +1,46 @@
+{
+  "checkpoint": "inspectable_trace_off.pt",
+  "device": "cuda",
+  "vram_gb": 8.0,
+  "training_config": {
+    "model_name": "inspectable_trace_off",
+    "d_model": 1024,
+    "n_heads": 16,
+    "n_layers": 12,
+    "n_experts": 4,
+    "d_ff_mult": 4,
+    "batch_size": 96,
+    "seq_len": 512,
+    "lr": 0.0003,
+    "steps": 8000,
+    "eval_every": 250,
+    "eval_batches": 20,
+    "seed": 0,
+    "compile": true,
+    "bf16": true,
+    "fused_optim": true,
+    "tf32_matmul": true,
+    "cudnn_benchmark": true,
+    "save_checkpoint_path": "/workspace/artifacts/checkpoints/inspectable_trace_off.pt"
+  },
+  "measurement_batch_size": 4,
+  "final_val_loss_from_ckpt": 0.5294079691171646,
+  "final_val_perplexity_from_ckpt": 1.6979267859036216,
+  "costs": {
+    "trace_off": {
+      "fwd_ms": 75.07660675048828,
+      "fwd_bwd_ms": 215.8909454345703,
+      "peak_mem_mb": 3691.542528
+    },
+    "trace_on": {
+      "fwd_ms": 208.374267578125,
+      "fwd_bwd_ms": 436.3561096191406,
+      "peak_mem_mb": 5203.064832
+    }
+  },
+  "ratios": {
+    "fwd_trace_on_over_off": 2.7754886188535655,
+    "fwd_bwd_trace_on_over_off": 2.021187635918646,
+    "mem_trace_on_over_off": 1.40945547627726
+  }
+}

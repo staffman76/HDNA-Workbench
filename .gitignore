@@ -24,3 +24,7 @@ workbench/viewer/saves/
 
 # Experiment data caches (re-downloaded on demand)
 experiments/*/_data/
+
+# Cloud-run checkpoint files (too big for git, kept locally for case-study work)
+experiments/*/checkpoints_cloud/
+experiments/*/checkpoints/

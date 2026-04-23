@@ -4,24 +4,36 @@
 
 ## Headline
 
-On a 57M-parameter language model trained from scratch on TinyStories (Eldan & Li, 2023) for 5,000 steps on an NVIDIA A100 80GB:
+On a **152M-parameter** language model trained from scratch on TinyStories (Eldan & Li, 2023) for 8,000 steps on an NVIDIA A100 80GB SXM:
 
-> The HDNA **InspectableTransformer** achieves **99.89%** of vanilla-transformer quality (final val perplexity **1.8615 vs 1.8595**) at **98.78%** of vanilla throughput (**41,432 vs 41,942 tokens/sec**), while exposing the internal trace surface that makes decisions inspectable — per-neuron activation history, expert routing logs, per-head attention statistics.
+> The HDNA **InspectableTransformer** matches vanilla-transformer quality (final val perplexity **1.6979 vs 1.6931**, within 0.3%) at **116.5% of vanilla throughput** (**146,057 vs 125,335 tokens/sec**), while exposing the internal trace surface that makes decisions inspectable — per-neuron activation history, expert routing logs, per-head attention statistics.
 
-That's the full trade-off: **within 0.1% on quality, within 1.2% on throughput, +24% peak GPU memory**. For that cost, every forward pass produces an auditable trace of which experts fired, which attention heads specialized on which positions, and how each neuron's activation evolved — surfaced as first-class data structures, not post-hoc instrumentation.
+That's the core trade-off: **within 0.3% on quality, 16.5% *faster* on throughput, +22% peak GPU memory**. Inspectable actually *outperforms* vanilla in tokens/sec at this scale because its MoE routing means only ~67% of parameters fire per token — each token does ~33% less compute, and the per-step MoE dispatch overhead is small relative to the savings at 152M params.
 
 ## Key Numbers
 
-### TinyStories 57M, matched A/B (A100 80GB SXM, 5,000 steps, seed=0)
+### TinyStories 152M, matched A/B (A100 80GB SXM, 8,000 steps, BF16 + torch.compile + fused AdamW, seed=0)
 
 | Metric | Vanilla | Inspectable | Ratio |
 |:---|---:|---:|---:|
-| Params (total) | 57,491,200 | 57,534,336 | +0.075% |
-| Active params per token | 57,491,200 | **38,635,392 (67%)** | — |
-| Final val perplexity | 1.8595 | 1.8615 | 1.0011× |
-| Throughput (tok/s) | 41,942 | 41,432 | 0.988× |
-| Peak GPU memory | 14.8 GB | 18.3 GB | 1.238× |
-| Wall time | 65.4 min | 66.1 min | 1.012× |
+| Params (total) | 152,205,568 | 152,291,824 | +0.06% |
+| Active params per token | 152,205,568 | **101,911,024 (67%)** | — |
+| Final val perplexity | 1.6931 | 1.6979 | 1.0028× |
+| Throughput (tok/s) | 125,335 | **146,057** | **1.165×** (inspectable faster) |
+| Peak GPU memory | 43.5 GB | 53.0 GB | 1.219× |
+| Wall time (training loop) | 52.3 min | 44.9 min | 0.858× |
+
+### Inspection-mode overhead (152M, trace_off vs trace_on)
+
+Measured post-training from the inspectable checkpoint. Trace-on records per-neuron activation history, per-head attention statistics, and expert-routing logs on every forward — the "full inspection" configuration used during auditing / debugging, not during production inference.
+
+| Metric | trace_off | trace_on | Ratio |
+|:---|---:|---:|---:|
+| fwd ms (batch=4, seq=512) | 75.08 | 208.37 | 2.78× |
+| fwd+bwd ms | 215.89 | 436.36 | 2.02× |
+| peak memory | 3.6 GB | 5.1 GB | 1.41× |
+
+Trace adds ~2× to training-step cost and ~40% to memory when enabled — measured on a 4060 Ti after checkpoint transfer. The ratio is approximately hardware-independent for this model size.
 
 ### Scaling across d_model (A100 80GB, tiny Shakespeare, 1,500 steps)
 
@@ -79,8 +91,10 @@ Byte-level (vocab=256, raw UTF-8) removes every external tokenizer dependency. E
 
 ### Compute budget
 
-- **$5.88 total** on RunPod A100 80GB SXM (community pricing, $1.79/hr) for the full parity scaling sweep + TinyStories A/B.
-- Single-node single-GPU; no distributed training required to produce these numbers.
+- **First cloud run (parity scaling sweep + 57M TinyStories A/B, FP32)**: $5.88 on RunPod A100 80GB SXM.
+- **Second cloud run (152M TinyStories A/B, BF16 + torch.compile)**: ~$6 (two conditions × ~50 min each, plus an idle period after a RunPod-pushed host reboot). Trained at 125K–146K tokens/sec.
+- **Total**: under $12 for all the numbers in this document.
+- Single-node single-GPU; no distributed training required.
 
 ### One command to reproduce the whole thing
 
@@ -101,10 +115,10 @@ On a RunPod A100 80GB: ~3.5 hours wall clock, ~$6 budget, artifacts land in `/wo
 
 ### What it doesn't prove
 
-- **Inspectability value**: this benchmark confirms the *cost* of inspectability is low; it does not yet demonstrate a concrete debugging or audit win that vanilla transformers can't match. A case study showing HDNA's trace surfacing a specific model pathology faster than existing tools (TransformerLens, nnsight) is the next artifact needed.
-- **Scaling beyond 57M params**: tested up to 51M params on tiny Shakespeare and 57M on TinyStories. Larger-model training runs (200M-1B params) remain untested; based on the narrowing-overhead trend they should hold, but that's inference, not measurement.
-- **Multi-seed variance**: single seed per condition. PPL differences below ~2% are within the expected single-seed noise band; multi-seed averaging (~$18 additional cloud cost) would tighten the claim.
-- **Mixed-precision production numbers**: these numbers are FP32. BF16 + `torch.compile` would give a more accurate picture of production deployment; not measured here.
+- **Inspectability value**: this benchmark confirms the *cost* of inspectability is low; it does not yet demonstrate a concrete debugging or audit win that vanilla transformers can't match. A case study using the saved 152M checkpoint to surface a specific model pathology faster than existing tools (TransformerLens, nnsight) is the next artifact needed.
+- **Scaling beyond 152M params**: tested up to 51M params on tiny Shakespeare and 152M on TinyStories. Billion-parameter training runs remain untested; based on the narrowing-overhead trend and the *reversing* throughput ratio at 152M (where sparse activation beats dispatch overhead), the relationship should improve with scale — but that's inference, not measurement.
+- **Multi-seed variance**: single seed per condition. PPL differences below ~1% are within expected single-seed noise; multi-seed averaging (~$18 additional cloud cost) would tighten the quality claim.
+- **TinyStories alone**: a single corpus. Quality parity on other domains (code, math, multilingual) is not measured. TinyStories was chosen as the standard "small LM from scratch" benchmark; broader domain coverage is a follow-up.
 
 ## Related artifacts
 

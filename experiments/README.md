@@ -119,6 +119,16 @@ Contextual bandit, 2500 rounds, seeds `{0, 1, 2}`, four scoring regimes. Oracle 
 
 Decay math matches `max(floor, start − i·rate)` to `8.9e-16` max error. Full decay (floor=0) fully mitigates the exp-6 confidence-only quirk: oracle reaches `INDEPENDENT` every seed and late-stage rolling win share = 1.000. Natural decay (default floor=0.4) provides partial-but-inconsistent mitigation — acceptance improves 2/3 seeds, regresses 1/3. Calibration note in the experiment README suggests lowering the default floor or using a floor-schedule.
 
+### Cloud-run numbers (follow-up to experiments 1 and the campaign)
+
+Two A100 80GB SXM rental runs extend the synthetic-task validation with real-model measurements. See `experiments/parity_transformer/README.md` (cloud-run extension) and `experiments/tinystories_bench/README.md` for full details + plots.
+
+- **Parity scaling sweep at d=[384–1024]** (tiny Shakespeare, 1500 steps, $1.86): PPL gap closes monotonically from +5.4% at d=384 to within ±1% at d=1024 — quality parity at 51M params. Forward-pass speed at vanilla parity from d=512 onward.
+- **TinyStories matched A/B at 57M params** (v1, FP32, 5000 steps): PPL ratio 1.0011× (within noise), throughput ratio 0.988×, +24% peak memory.
+- **TinyStories matched A/B at 152M params** (v2, BF16 + torch.compile, 8000 steps): PPL ratio 1.0028× (within noise), throughput ratio **1.165× — inspectable *faster* than vanilla** at this scale because sparse MoE activation dominates dispatch overhead. Peak memory ratio 1.219×. Trace-on inspection overhead: ~2× training-step cost, ~40% peak memory.
+- **Compute budget**: under $12 total across both runs. Checkpoints (vanilla + inspectable at 152M) preserved locally for case-study work.
+- **Sales/compliance one-pager**: `docs/benchmark_results.md`.
+
 ### 8. Curriculum mastery + forgetting
 4-level toy curriculum (strict prereq chain), 3-phase run (mastery ramp / review mix / forgetting injection), seeds `{0, 1, 2}`. All six predictions pass 3/3 after the fix:
 

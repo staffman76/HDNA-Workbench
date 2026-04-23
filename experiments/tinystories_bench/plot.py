@@ -72,7 +72,20 @@ def plot_loss_curves(vanilla: dict, inspectable: dict, out_path: str) -> None:
     ax_val.grid(True, alpha=0.3)
     ax_val.legend(loc="upper right")
 
-    fig.suptitle("TinyStories 57M, matched A/B on A100 80GB SXM (5000 steps)")
+    # Figure title from the data — avoids stale hardcoded numbers.
+    import os as _os
+    cfg = None
+    try:
+        cfg = vanilla["config"]
+    except KeyError:
+        pass
+    if cfg:
+        params_m = round(vanilla["params"]["total"] / 1e6)
+        title = (f"TinyStories {params_m}M, matched A/B on A100 80GB SXM "
+                 f"({cfg['steps']} steps)")
+    else:
+        title = "TinyStories matched A/B"
+    fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -117,8 +130,9 @@ def plot_headline_bars(summary: dict, out_path: str) -> None:
                 ha="center", va="bottom", fontsize=9)
     ax.grid(True, alpha=0.3, axis="y")
 
+    params_m = round(cmp["params_total_vanilla"] / 1e6)
     fig.suptitle(
-        f"TinyStories 57M matched A/B — PPL ratio "
+        f"TinyStories {params_m}M matched A/B — PPL ratio "
         f"{cmp['ppl_ratio_inspectable_over_vanilla']:.4f}×, "
         f"throughput ratio "
         f"{cmp['throughput_ratio_inspectable_over_vanilla']:.4f}×"
