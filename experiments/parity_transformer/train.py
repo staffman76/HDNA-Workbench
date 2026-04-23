@@ -34,6 +34,16 @@ class TrainConfig:
     seed: int = 0
     compile: bool = False    # torch.compile(mode="reduce-overhead")
 
+    # Performance knobs (safe defaults; CUDA-only, no-op on CPU).
+    # Applied via _setup_gpu_perf() at the start of train_one.
+    bf16: bool = False                # autocast fwd+bwd to bfloat16
+    fused_optim: bool = True          # AdamW(fused=True) when on CUDA
+    tf32_matmul: bool = True          # allow TF32 for residual FP32 matmul
+    cudnn_benchmark: bool = True      # autotune cudnn kernels for shapes
+
+    # If set, save final state_dict + config to this path after training.
+    save_checkpoint_path: str = ""
+
 
 @dataclass
 class TrainResult:
@@ -93,6 +103,16 @@ def _forward_logits(
     return model(x)
 
 
+def _setup_gpu_perf(config: TrainConfig, device: torch.device) -> None:
+    """Apply CUDA perf toggles. No-op on CPU. Call once at train start."""
+    if device.type != "cuda":
+        return
+    if config.tf32_matmul:
+        torch.set_float32_matmul_precision("high")
+    if config.cudnn_benchmark:
+        torch.backends.cudnn.benchmark = True
+
+
 @torch.no_grad()
 def evaluate(
     model: nn.Module,
@@ -104,13 +124,20 @@ def evaluate(
     model.eval()
     loss_fn = nn.CrossEntropyLoss()
     trace_on = _trace_flag(config)
+    use_autocast = config.bf16 and device.type == "cuda"
     total = 0.0
     for _ in range(config.eval_batches):
         x, y = dataset.batch(
             "val", config.batch_size, config.seq_len, device, generator
         )
-        logits = _forward_logits(model, x, return_trace=trace_on)
-        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+        if use_autocast:
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = _forward_logits(model, x, return_trace=trace_on)
+                loss = loss_fn(logits.reshape(-1, logits.shape[-1]),
+                               y.reshape(-1))
+        else:
+            logits = _forward_logits(model, x, return_trace=trace_on)
+            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
         total += loss.item()
     model.train()
     return total / config.eval_batches
@@ -121,6 +148,7 @@ def train_one(
     dataset: CharDataset,
     device: torch.device,
 ) -> TrainResult:
+    _setup_gpu_perf(config, device)
     torch.manual_seed(config.seed)
     if device.type == "cuda":
         torch.cuda.manual_seed_all(config.seed)
@@ -131,19 +159,36 @@ def train_one(
     params = count_params(model)  # count on the uncompiled module
     trace_on = _trace_flag(config)
 
-    if config.compile:
-        # reduce-overhead targets CUDA graph capture, which is the mode most
-        # likely to help when the bottleneck is many small kernel launches.
-        model = torch.compile(model, mode="reduce-overhead")
-
-    # Cost metrics on a single representative batch
+    # Cost metrics on a single representative batch. We measure BEFORE
+    # enabling autocast so the numbers stay comparable to prior FP32 sweeps.
     sx, sy = dataset.batch(
         "train", config.batch_size, config.seq_len, device, train_gen
     )
+
+    if config.compile:
+        # reduce-overhead targets CUDA graph capture, which is the mode most
+        # likely to help when the bottleneck is many small kernel launches.
+        # Try compile + a sentinel forward to catch late-binding failures
+        # (triton missing, dynamic-shape rejection, etc.). Uncompiled run
+        # is still correct, just slower, so we prefer that to a crash.
+        try:
+            compiled = torch.compile(model, mode="reduce-overhead")
+            with torch.no_grad():
+                _ = _forward_logits(compiled, sx, return_trace=trace_on)
+            model = compiled
+        except Exception as e:
+            print(f"[train_one] torch.compile failed "
+                  f"({type(e).__name__}: {str(e)[:120]}). "
+                  f"Falling back to eager mode.")
+
     costs = measure_costs(model, sx, sy, return_trace=trace_on)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
+    # Fused AdamW is a free ~10-15% optimizer speedup on CUDA.
+    use_fused = config.fused_optim and device.type == "cuda"
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr,
+                                  fused=use_fused)
     loss_fn = nn.CrossEntropyLoss()
+    use_autocast = config.bf16 and device.type == "cuda"
 
     train_curve: list[tuple[int, float]] = []
     val_curve: list[tuple[int, float]] = []
@@ -152,8 +197,18 @@ def train_one(
         x, y = dataset.batch(
             "train", config.batch_size, config.seq_len, device, train_gen
         )
-        logits = _forward_logits(model, x, return_trace=trace_on)
-        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+        if use_autocast:
+            # BF16 has the same exponent range as FP32, so no loss scaler
+            # is needed (unlike FP16). Matmuls run on tensor cores; reductions
+            # and the loss stay in FP32 under torch.autocast.
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = _forward_logits(model, x, return_trace=trace_on)
+                loss = loss_fn(logits.reshape(-1, logits.shape[-1]),
+                               y.reshape(-1))
+        else:
+            logits = _forward_logits(model, x, return_trace=trace_on)
+            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
@@ -166,6 +221,20 @@ def train_one(
     wall_time_s = time.perf_counter() - t0
     final_val_loss = val_curve[-1][1]
     final_val_ppl = math.exp(final_val_loss)
+
+    # Optional checkpoint save. Saves the UNCOMPILED module's state_dict
+    # so it can be reloaded without requiring torch.compile in the consumer.
+    if config.save_checkpoint_path:
+        import os
+        os.makedirs(os.path.dirname(config.save_checkpoint_path) or ".",
+                    exist_ok=True)
+        torch.save({
+            "state_dict": _unwrap(model).state_dict(),
+            "config": asdict(config),
+            "vocab_size": dataset.vocab_size,
+            "final_val_loss": final_val_loss,
+            "final_val_perplexity": final_val_ppl,
+        }, config.save_checkpoint_path)
 
     return TrainResult(
         config=asdict(config),

@@ -64,7 +64,21 @@ SEED = _env_int("SEED", 0)
 EVAL_EVERY = _env_int("EVAL_EVERY", 250)
 EVAL_BATCHES = _env_int("EVAL_BATCHES", 20)
 
-CONDITIONS = ["vanilla", "inspectable_trace_off"]
+# Performance knobs forwarded into TrainConfig. Default BF16=off so a
+# bare invocation reproduces the original FP32 numbers; set BF16=1 on
+# cloud runs for 2-3x speedup. COMPILE=1 tries torch.compile.
+BF16 = os.environ.get("BF16", "0") == "1"
+COMPILE = os.environ.get("COMPILE", "0") == "1"
+
+# If set, each condition saves its trained state_dict to
+# <SAVE_CHECKPOINT_DIR>/<condition>.pt at end of training.
+SAVE_CHECKPOINT_DIR = os.environ.get("SAVE_CHECKPOINT_DIR", "")
+
+# Which conditions to run (comma-separated). Default: vanilla + trace-off.
+# Override with CONDITIONS="inspectable_trace_off" to only do one.
+CONDITIONS = os.environ.get(
+    "CONDITIONS", "vanilla,inspectable_trace_off"
+).split(",")
 
 
 def _free_gpu() -> None:
@@ -75,6 +89,11 @@ def _free_gpu() -> None:
 
 
 def run_one(condition: str, dataset, device) -> dict:
+    ckpt_path = ""
+    if SAVE_CHECKPOINT_DIR:
+        os.makedirs(SAVE_CHECKPOINT_DIR, exist_ok=True)
+        ckpt_path = os.path.join(SAVE_CHECKPOINT_DIR, f"{condition}.pt")
+
     cfg = TrainConfig(
         model_name=condition,
         d_model=D_MODEL,
@@ -89,6 +108,9 @@ def run_one(condition: str, dataset, device) -> dict:
         seed=SEED,
         eval_every=EVAL_EVERY,
         eval_batches=EVAL_BATCHES,
+        bf16=BF16,
+        compile=COMPILE,
+        save_checkpoint_path=ckpt_path,
     )
     try:
         result = train_one(cfg, dataset, device)
@@ -128,6 +150,9 @@ def main() -> int:
         "train_tokens": int(dataset.train_ids.numel()),
         "val_tokens": int(dataset.val_ids.numel()),
         "device": str(device),
+        "bf16": BF16, "compile": COMPILE,
+        "save_checkpoint_dir": SAVE_CHECKPOINT_DIR or None,
+        "conditions": CONDITIONS,
     }
     print("=" * 78)
     print(f"tinystories_bench  device={device}")
@@ -166,9 +191,13 @@ def main() -> int:
                   f"{res['tokens_per_sec']:,.0f}")
             print(f"  wall time:               {elapsed:.1f}s")
 
-    # Head-to-head summary
+    # Head-to-head summary (only emitted if both matched conditions ran)
     summary = {"config": config_summary, "runs": runs}
-    if all(("error" not in runs[c]) for c in CONDITIONS):
+    matched_pair = ("vanilla" in runs
+                    and "inspectable_trace_off" in runs
+                    and "error" not in runs["vanilla"]
+                    and "error" not in runs["inspectable_trace_off"])
+    if matched_pair:
         v = runs["vanilla"]
         i = runs["inspectable_trace_off"]
         summary["comparison"] = {

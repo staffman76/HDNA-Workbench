@@ -21,6 +21,11 @@ REPO_BRANCH="${REPO_BRANCH:-main}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-/workspace/artifacts}"
 WORKDIR="${WORKDIR:-/workspace/hdna}"
 
+# Force unbuffered Python so `| tee` doesn't swallow progress output until
+# the 4KB pipe buffer fills (previous cloud run lost ~15 min of visibility
+# to this before we caught it).
+export PYTHONUNBUFFERED=1
+
 log() { printf '\033[1;36m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
 
 log "GPU info"
@@ -72,6 +77,13 @@ fi
 # Defaults sized for A100 80GB SXM: d=1024, 12 layers, ~200M params — the
 # size class people actually train from scratch. VRAM-headroom permits
 # batch 96 / seq 512 without gradient checkpointing.
+#
+# BF16 + torch.compile + fused AdamW are enabled by default on cloud runs
+# for ~4-6x speedup over FP32 eager mode. Set BF16=0 COMPILE=0 to reproduce
+# the earlier FP32 numbers byte-for-byte.
+#
+# SAVE_CHECKPOINT_DIR dumps each trained condition's state_dict so downstream
+# inspection / case-study work can load the actual weights locally.
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_TINYSTORIES:-0}" != "1" ]]; then
     log "== tinystories_bench =="
@@ -83,6 +95,9 @@ if [[ "${SKIP_TINYSTORIES:-0}" != "1" ]]; then
     SEQ_LEN="${TS_SEQ_LEN:-512}" \
     STEPS="${TS_STEPS:-8000}" \
     LR="${TS_LR:-3e-4}" \
+    BF16="${TS_BF16:-1}" \
+    COMPILE="${TS_COMPILE:-1}" \
+    SAVE_CHECKPOINT_DIR="${TS_CHECKPOINT_DIR:-$ARTIFACT_DIR/checkpoints}" \
     TINYSTORIES_MAX_BYTES="${TS_MAX_BYTES:-500000000}" \
     RESULTS_DIR="$ARTIFACT_DIR/tinystories_cloud" \
         python -m experiments.tinystories_bench.run 2>&1 \

@@ -58,15 +58,20 @@ code edits.
 | `TS_SEQ_LEN` | `512` | context length |
 | `TS_STEPS` | `8000` | training steps |
 | `TS_LR` | `3e-4` | learning rate |
+| `TS_BF16` | `1` | BF16 autocast (2-3× speedup on A100; set `0` for byte-for-byte FP32) |
+| `TS_COMPILE` | `1` | try `torch.compile` (1.5-3× more); falls back gracefully on failure |
+| `TS_CHECKPOINT_DIR` | `$ARTIFACT_DIR/checkpoints` | where per-condition state_dicts save. Set empty to skip. |
 | `TS_MAX_BYTES` | `500000000` | corpus size cap (bytes) — 500MB |
 
 ## Rough budget
 
-On an A100 80GB SXM (~$1.79/hr community):
-- Parity sweep, defaults (6 sizes up to d=2048): ~45–60 min. **~$1.50.**
-- TinyStories bench at d=1024 / 12 layers / 8000 steps × 2 conditions: ~1–1.5 hours. **~$2–3.**
-- Buffer: ~30 min. **~$1.**
-- Total: **~$5–7** for a full run.
+On an A100 80GB SXM (~$1.79/hr community), **with default BF16 + compile enabled**:
+- Parity sweep, defaults (6 sizes up to d=2048, FP32): ~45–60 min. **~$1.50.**
+- TinyStories bench at d=1024 / 12 layers / 8000 steps × 2 conditions, BF16+compile: ~25–40 min. **~$1–1.50.**
+- Buffer: ~15 min. **~$0.50.**
+- Total: **~$3–4** for a full run producing trained checkpoints.
+
+For the original April 2026 FP32 run (d=768, 5000 steps, no BF16/compile, no checkpoints): ~2 hours, **$5.88** actual.
 
 On an A100 40GB (~$0.80/hr):
 - Override `TS_D_MODEL=768 TS_BATCH_SIZE=48 TS_N_LAYERS=8 TS_N_HEADS=12`.
