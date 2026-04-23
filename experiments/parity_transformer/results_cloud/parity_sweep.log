@@ -1,0 +1,19 @@
+device=cuda  vocab=65  n_layers=6 n_heads=8 seq_len=256 batch=32 steps=1500 seed=0
+d_model sweep: [384, 512, 768, 1024]
+conditions:    ['vanilla', 'inspectable_trace_off', 'inspectable_trace_on']
+==============================================================================
+[d384_vanilla] total=7,252,289  active=7,252,289  fwd= 13.61ms  fwd+bwd=  35.96ms  mem= 1149MB  ppl=  5.35  wall= 60.3s
+[d384_inspectable_trace_off] total=7,268,489  active=5,492,105  fwd= 11.87ms  fwd+bwd=  43.33ms  mem= 1511MB  ppl=  5.64  wall= 71.1s
+[d384_inspectable_trace_on] total=7,268,489  active=5,492,105  fwd=249.32ms  fwd+bwd= 298.07ms  mem= 2245MB  ppl=  5.65  wall=530.9s
+[d512_vanilla] total=12,815,425  active=12,815,425  fwd= 16.74ms  fwd+bwd=  52.40ms  mem= 1538MB  ppl=  4.94  wall= 86.3s
+[d512_inspectable_trace_off] total=12,837,001  active=9,682,057  fwd= 17.23ms  fwd+bwd=  58.37ms  mem= 2019MB  ppl=  5.03  wall= 95.6s
+[d512_inspectable_trace_on] total=12,837,001  active=9,682,057  fwd=288.58ms  fwd+bwd= 348.31ms  mem= 2722MB  ppl=  5.00  wall=594.4s
+[d768_vanilla] total=28,660,289  active=28,660,289  fwd= 32.86ms  fwd+bwd= 103.09ms  mem= 2332MB  ppl=  4.63  wall=169.4s
+[d768_inspectable_trace_off] total=28,692,617  active=21,600,905  fwd= 33.91ms  fwd+bwd= 107.76ms  mem= 3064MB  ppl=  4.61  wall=176.6s
+[d768_inspectable_trace_on] total=28,692,617  active=21,600,905  fwd=306.69ms  fwd+bwd= 384.80ms  mem= 3719MB  ppl=  4.63  wall=649.2s
+[d1024_vanilla] total=50,796,609  active=50,796,609  fwd= 52.96ms  fwd+bwd= 162.99ms  mem= 3154MB  ppl=  4.52  wall=268.2s
+[d1024_inspectable_trace_off] total=50,839,689  active=38,238,345  fwd= 54.20ms  fwd+bwd= 170.38ms  mem= 4138MB  ppl=  4.56  wall=280.0s
+[d1024_inspectable_trace_on] total=50,839,689  active=38,238,345  fwd=350.68ms  fwd+bwd= 459.79ms  mem= 4741MB  ppl=  4.60  wall=760.6s
+==============================================================================
+sweep complete in 62.4 min
+summary -> /workspace/artifacts/parity_cloud/_summary.json
