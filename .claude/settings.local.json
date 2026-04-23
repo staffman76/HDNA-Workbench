@@ -7,7 +7,15 @@
       "Bash(pip install *)",
       "Bash(git *)",
       "Bash(grep -E \"accuracy|step 2[0-9]{3,4}\")",
-      "Bash(D_MODEL_SWEEP=\"64,128\" STEPS=100 python -m experiments.parity_transformer.run_sweep)"
+      "Bash(D_MODEL_SWEEP=\"64,128\" STEPS=100 python -m experiments.parity_transformer.run_sweep)",
+      "Bash(mkdir -p \"C:/Users/Chris/Downloads/hdna_cloud_run\")",
+      "Bash(tar xzf *)",
+      "Bash(mkdir *)",
+      "Bash(mkdir -p C:/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/results_cloud C:/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/plots_cloud C:/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud C:/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/plots_cloud)",
+      "Bash(cp -r /c/Users/Chris/Downloads/hdna_cloud_run/parity_cloud/* /c/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/results_cloud/)",
+      "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run/parity_sweep.log /c/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/results_cloud/)",
+      "Bash(cp -r /c/Users/Chris/Downloads/hdna_cloud_run/tinystories_cloud/* /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud/)",
+      "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run/tinystories.log /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud/)"
     ]
   }
 }
