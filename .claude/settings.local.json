@@ -15,7 +15,14 @@
       "Bash(cp -r /c/Users/Chris/Downloads/hdna_cloud_run/parity_cloud/* /c/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/results_cloud/)",
       "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run/parity_sweep.log /c/Users/Chris/Downloads/HDNA-Workbench/experiments/parity_transformer/results_cloud/)",
       "Bash(cp -r /c/Users/Chris/Downloads/hdna_cloud_run/tinystories_cloud/* /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud/)",
-      "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run/tinystories.log /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud/)"
+      "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run/tinystories.log /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/results_cloud/)",
+      "Bash(mv /c/Users/Chris/Downloads/vanilla.bin /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/checkpoints_cloud/vanilla.pt)",
+      "Bash(mv /c/Users/Chris/Downloads/inspectable.bin /c/Users/Chris/Downloads/HDNA-Workbench/experiments/tinystories_bench/checkpoints_cloud/inspectable_trace_off.pt)",
+      "Bash(mv results_cloud results_cloud_v1_57m)",
+      "Bash(mv plots_cloud plots_cloud_v1_57m)",
+      "Bash(mkdir -p results_cloud plots_cloud)",
+      "Bash(cp -r /c/Users/Chris/Downloads/hdna_cloud_run_2/tinystories_cloud/* results_cloud/)",
+      "Bash(cp /c/Users/Chris/Downloads/hdna_cloud_run_2/tinystories.log results_cloud/)"
     ]
   }
 }
